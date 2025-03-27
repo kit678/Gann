@@ -1,383 +1,535 @@
 /**
- * Custom technical indicators for Highcharts
+ * Custom indicators framework for TradingView Charting Library
  * 
- * This module contains:
- * - An angle calculator that respects the price-to-bar ratio
- * - Pivot point detection for identifying market tops and bottoms
+ * This file provides utilities and base classes for creating custom geometric/visual
+ * indicators that can be registered with the TradingView chart.
  */
 
 /**
- * Calculate the angle between two points, accounting for price-to-bar ratio
- * @param {Object} p1 - Starting point {x, y}
- * @param {Object} p2 - Ending point {x, y}
- * @param {Number} priceToBarRatio - The ratio of price units to bar units
- * @returns {Number} - Angle in degrees
+ * Calculate the angle between two points in degrees
+ * @param {Object} point1 - First point with x and y coordinates
+ * @param {Object} point2 - Second point with x and y coordinates
+ * @returns {number} - Angle in degrees
  */
-export const calculateAngleBetweenPoints = (p1, p2, priceToBarRatio = 1) => {
-  // Calculate the adjusted height based on the ratio
-  const dx = p2.x - p1.x;
-  const dy = (p2.y - p1.y) * priceToBarRatio;
+export const calculateAngleBetweenPoints = (point1, point2) => {
+  const dx = point2.x - point1.x;
+  const dy = point2.y - point1.y;
+  const radians = Math.atan2(dy, dx);
+  let degrees = radians * (180 / Math.PI);
   
-  // Calculate angle in radians and convert to degrees
-  const angleRad = Math.atan2(dy, dx);
-  const angleDeg = angleRad * (180 / Math.PI);
+  // Normalize to 0-360
+  if (degrees < 0) {
+    degrees += 360;
+  }
   
-  return angleDeg;
+  return degrees;
 };
 
 /**
- * Detect pivot points (highs and lows) in price data according to classical technical analysis
- * @param {Array} xData - Array of x values (timestamps or indices)
- * @param {Array} yData - Array of y values (prices)
- * @param {Object} params - Parameters { lookback }
- * @returns {Object} - Arrays of pivot high and low points
+ * Base class for custom indicators
  */
-export const getPivotPoints = (xData, yData, params = {}) => {
-  const lookback = params.lookback || 5;
-  
-  // Need at least 2*lookback+1 points to detect pivots
-  if (yData.length < 2 * lookback + 1) {
-    console.warn(`Not enough data points (${yData.length}) to detect pivots (need ${2 * lookback + 1})`);
-    return { highs: [], lows: [] };
+export class CustomIndicator {
+  constructor(id, name, description) {
+    this.id = id;
+    this.name = name;
+    this.description = description;
+    this.isActive = false;
+    this._instances = [];
   }
-  
-  const pivotHighs = [];
-  const pivotLows = [];
-  
-  // Debug data range to ensure values make sense
-  const minPrice = Math.min(...yData);
-  const maxPrice = Math.max(...yData);
-  console.log(`Data range: min=${minPrice.toFixed(2)}, max=${maxPrice.toFixed(2)}, points=${yData.length}`);
-  
-  // Iterate through the data, skipping the first and last 'lookback' points
-  for (let i = lookback; i < yData.length - lookback; i++) {
-    // Get high and low for the current bar - for OHLC data
-    // If using close prices only, both will be the same value
-    const currentHigh = Array.isArray(yData[i]) ? yData[i][1] : yData[i]; // High
-    const currentLow = Array.isArray(yData[i]) ? yData[i][2] : yData[i];  // Low
-    
-    // Check for pivot high - must be higher than ALL bars in the window
-    let isPivotHigh = true;
-    for (let j = i - lookback; j <= i + lookback; j++) {
-      // Skip the current bar
-      if (j === i) continue;
-      
-      // Get high of comparison bar
-      const compareHigh = Array.isArray(yData[j]) ? yData[j][1] : yData[j];
-      
-      // If ANY bar in window has a higher high, this is not a pivot high
-      if (compareHigh >= currentHigh) {
-        isPivotHigh = false;
-        break;
+
+  /**
+   * Register the indicator with the TradingView chart
+   * @param {Object} chart - TradingView chart instance
+   * @param {Object} widget - TradingView widget instance
+   */
+  register(chart, widget) {
+    // To be implemented by subclasses
+    console.log(`Base register method called for ${this.name}`);
+  }
+
+  /**
+   * Add the indicator to the chart
+   * @param {Object} chart - TradingView chart instance
+   * @param {Object} widget - TradingView widget instance
+   */
+  add(chart, widget) {
+    this.isActive = true;
+    // To be implemented by subclasses
+  }
+
+  /**
+   * Remove the indicator from the chart
+   * @param {Object} chart - TradingView chart instance
+   * @param {Object} widget - TradingView widget instance
+   */
+  remove(chart, widget) {
+    this.isActive = false;
+    // Remove all instances
+    this._instances.forEach(instance => {
+      if (instance && typeof instance.remove === 'function') {
+        instance.remove();
       }
-    }
-    
-    // Check for pivot low - must be lower than ALL bars in the window
-    let isPivotLow = true;
-    for (let j = i - lookback; j <= i + lookback; j++) {
-      // Skip the current bar
-      if (j === i) continue;
-      
-      // Get low of comparison bar
-      const compareLow = Array.isArray(yData[j]) ? yData[j][2] : yData[j];
-      
-      // If ANY bar in window has a lower low, this is not a pivot low
-      if (compareLow <= currentLow) {
-        isPivotLow = false;
-        break;
-      }
-    }
-    
-    // Save pivot points with their coordinates
-    if (isPivotHigh) {
-      pivotHighs.push({ x: xData[i], y: currentHigh, index: i });
-    }
-    
-    if (isPivotLow) {
-      pivotLows.push({ x: xData[i], y: currentLow, index: i });
+    });
+    this._instances = [];
+  }
+
+  /**
+   * Track an instance of this indicator
+   * @param {Object} instance - Indicator instance to track
+   */
+  _trackInstance(instance) {
+    if (instance) {
+      this._instances.push(instance);
     }
   }
-  
-  console.log(`Found ${pivotHighs.length} highs and ${pivotLows.length} lows in ${yData.length} data points`);
-  
-  return { highs: pivotHighs, lows: pivotLows };
-};
+}
 
 /**
- * Register custom indicators with Highcharts
- * @param {Object} Highcharts - The Highcharts instance
+ * Geometric TrendLine Indicator
+ * 
+ * Creates a trend line based on geometry patterns in price action
  */
-export const registerCustomIndicators = (Highcharts) => {
-  if (!Highcharts) {
-    console.error('Highcharts instance is required to register custom indicators');
-    return;
+export class GeometricTrendLine extends CustomIndicator {
+  constructor() {
+    super(
+      'geometric_trendline',
+      'Geometric Trend Line',
+      'Automatically draws trend lines based on geometric patterns'
+    );
+    
+    this.settings = {
+      lookbackBars: 50,
+      minimumSwings: 3,
+      angleThreshold: 5, // degrees
+      lineColor: '#2196F3',
+      lineWidth: 2,
+      lineStyle: 0 // 0 = solid, 1 = dotted, 2 = dashed
+    };
   }
 
-  // Add direct data approach for pivot points
-  Highcharts.createPivotPoints = function(chart, seriesId, params = {}) {
-    // Safety check - make sure we have access to the chart
-    if (!chart) {
-      console.error('Invalid chart instance');
-      return { highs: [], lows: [] };
-    }
-    
-    const lookback = params.lookback || 5;
-    const method = params.method || 'hlc'; // 'hlc' or 'close'
-    
-    console.log(`Creating pivot points with method: ${method}, lookback=${lookback}`);
+  register(chart, widget) {
+    console.log('Registered Geometric Trend Line indicator');
+  }
+
+  add(chart, widget) {
+    super.add(chart, widget);
     
     try {
-      // Get source data directly from the userOptions
-      const sourceData = chart.userOptions.series && chart.userOptions.series[0] && 
-                         chart.userOptions.series[0].data;
+      // Get visible range
+      const visibleRange = chart.getVisibleRange();
+      const bars = this.settings.lookbackBars;
       
-      if (!sourceData || !Array.isArray(sourceData) || sourceData.length === 0) {
-        console.error('No source data available in chart options');
-        return { highs: [], lows: [] };
-      }
+      // Create a trend line
+      this._createTrendLine(chart, visibleRange);
       
-      console.log(`Processing ${sourceData.length} data points from source data`);
-      
-      // Create separate arrays for timestamp, highs, and lows
-      const xData = [];
-      const highData = [];
-      const lowData = [];
-      
-      // Extract high and low values properly from OHLC format
-      sourceData.forEach(point => {
-        if (Array.isArray(point) && point.length >= 4) {
-          // Standard OHLC format [timestamp, open, high, low, close]
-          xData.push(point[0]);  // Timestamp
-          highData.push(point[2]); // High
-          lowData.push(point[3]);  // Low
-        } else if (typeof point === 'object' && point.x != null) {
-          // Object format {x, open, high, low, close}
-          xData.push(point.x);
-          highData.push(point.high != null ? point.high : point.y);
-          lowData.push(point.low != null ? point.low : point.y);
-        } else {
-          // Simple price format
-          xData.push(point[0]);
-          highData.push(point[1]);
-          lowData.push(point[1]);
+      // Subscribe to visible range changes
+      widget.subscribe('visibleRangeChanged', () => {
+        if (this.isActive) {
+          // Update trend lines when range changes
+          this._updateTrendLines(chart);
         }
       });
-      
-      // Find pivot highs using high values
-      const pivotHighs = [];
-      for (let i = lookback; i < highData.length - lookback; i++) {
-        let isPivotHigh = true;
-        const currentHigh = highData[i];
-        
-        for (let j = i - lookback; j <= i + lookback; j++) {
-          if (j === i) continue; // Skip the current bar
-          
-          if (highData[j] >= currentHigh) {
-            isPivotHigh = false;
-            break;
-          }
-        }
-        
-        if (isPivotHigh) {
-          pivotHighs.push({ x: xData[i], y: currentHigh, index: i });
-        }
-      }
-      
-      // Find pivot lows using low values
-      const pivotLows = [];
-      for (let i = lookback; i < lowData.length - lookback; i++) {
-        let isPivotLow = true;
-        const currentLow = lowData[i];
-        
-        for (let j = i - lookback; j <= i + lookback; j++) {
-          if (j === i) continue; // Skip the current bar
-          
-          if (lowData[j] <= currentLow) {
-            isPivotLow = false;
-            break;
-          }
-        }
-        
-        if (isPivotLow) {
-          pivotLows.push({ x: xData[i], y: currentLow, index: i });
-        }
-      }
-      
-      console.log(`Found ${pivotHighs.length} highs and ${pivotLows.length} lows using true OHLC data`);
-      
-      // Remove any existing pivot series
-      chart.series.forEach(series => {
-        if (series.options.id === 'pivot-highs' || series.options.id === 'pivot-lows') {
-          series.remove(false);
-        }
-      });
-      
-      // Add pivot high markers
-      if (pivotHighs.length > 0) {
-        chart.addSeries({
-          type: 'scatter',
-          name: 'Pivot Highs',
-          id: 'pivot-highs',
-          color: '#21b838',
-          marker: {
-            symbol: 'triangle',
-            radius: 8,
-            fillColor: 'rgba(33, 184, 56, 0.9)',
-            lineColor: '#ffffff',
-            lineWidth: 2
-          },
-          data: pivotHighs.map(point => [point.x, point.y]),
-          showInLegend: false,
-          tooltip: {
-            pointFormat: '<span style="color:#21b838">●</span> Pivot High: <b>{point.y}</b><br/>'
-          },
-          zIndex: 10
-        }, false);
-        
-        console.log("Added pivot highs:", pivotHighs.map(h => h.y.toFixed(2)).join(", "));
-      }
-      
-      // Add pivot low markers
-      if (pivotLows.length > 0) {
-        chart.addSeries({
-          type: 'scatter',
-          name: 'Pivot Lows',
-          id: 'pivot-lows',
-          color: '#d91e1e',
-          marker: {
-            symbol: 'triangle-down',
-            radius: 8,
-            fillColor: 'rgba(217, 30, 30, 0.9)',
-            lineColor: '#ffffff',
-            lineWidth: 2
-          },
-          data: pivotLows.map(point => [point.x, point.y]),
-          showInLegend: false,
-          tooltip: {
-            pointFormat: '<span style="color:#d91e1e">●</span> Pivot Low: <b>{point.y}</b><br/>'
-          },
-          zIndex: 10
-        }, false);
-        
-        console.log("Added pivot lows:", pivotLows.map(l => l.y.toFixed(2)).join(", "));
-      }
-      
-      // Redraw the chart
-      chart.redraw();
-      return { highs: pivotHighs, lows: pivotLows };
-      
     } catch (error) {
-      console.error('Error creating pivot points with direct data approach:', error);
-      
-      // Fallback to another method if the direct approach fails
-      return tryAlternativePivotMethod(chart, lookback);
-    }
-  };
-  
-  // Fallback method that uses a different approach
-  function tryAlternativePivotMethod(chart, lookback) {
-    console.log("Trying alternative pivot detection method...");
-    try {
-      // Get data from chart's rendered points
-      const points = [];
-      let mainSeries = null;
-      
-      // Find the main price series
-      for (let i = 0; i < chart.series.length; i++) {
-        const series = chart.series[i];
-        if (series.type === 'candlestick' || series.type === 'ohlc') {
-          mainSeries = series;
-          break;
-        }
-      }
-      
-      if (!mainSeries || !mainSeries.points || mainSeries.points.length === 0) {
-        console.error("Could not find rendered points in any suitable series");
-        return { highs: [], lows: [] };
-      }
-      
-      // Extract data from rendered points
-      const xData = [];
-      const yData = [];
-      
-      mainSeries.points.forEach(point => {
-        if (point && point.x && (point.close !== undefined || point.y !== undefined)) {
-          xData.push(point.x);
-          yData.push(point.close !== undefined ? point.close : point.y);
-        }
-      });
-      
-      if (xData.length === 0) {
-        console.error("No usable data points found in rendered series");
-        return { highs: [], lows: [] };
-      }
-      
-      console.log(`Processing ${xData.length} data points from rendered series`);
-      
-      // Find pivot points 
-      const { highs, lows } = getPivotPoints(xData, yData, { lookback });
-      console.log(`Found ${highs.length} highs and ${lows.length} lows from rendered data`);
-      
-      // Remove any existing pivot series
-      chart.series.forEach(series => {
-        if (series.options.id === 'pivot-highs' || series.options.id === 'pivot-lows') {
-          series.remove(false);
-        }
-      });
-      
-      // Add pivot high markers
-      if (highs.length > 0) {
-        chart.addSeries({
-          type: 'scatter',
-          name: 'Pivot Highs',
-          id: 'pivot-highs',
-          color: '#21b838',
-          marker: {
-            symbol: 'triangle',
-            radius: 8,
-            fillColor: 'rgba(33, 184, 56, 0.9)',
-            lineColor: '#ffffff',
-            lineWidth: 2
-          },
-          data: highs.map(point => [point.x, point.y]),
-          showInLegend: false,
-          tooltip: {
-            pointFormat: '<span style="color:#21b838">●</span> Pivot High: <b>{point.y}</b><br/>'
-          },
-          zIndex: 10
-        }, false);
-      }
-      
-      // Add pivot low markers
-      if (lows.length > 0) {
-        chart.addSeries({
-          type: 'scatter',
-          name: 'Pivot Lows',
-          id: 'pivot-lows',
-          color: '#d91e1e',
-          marker: {
-            symbol: 'triangle-down',
-            radius: 8,
-            fillColor: 'rgba(217, 30, 30, 0.9)',
-            lineColor: '#ffffff',
-            lineWidth: 2
-          },
-          data: lows.map(point => [point.x, point.y]),
-          showInLegend: false,
-          tooltip: {
-            pointFormat: '<span style="color:#d91e1e">●</span> Pivot Low: <b>{point.y}</b><br/>'
-          },
-          zIndex: 10
-        }, false);
-      }
-      
-      // Redraw the chart
-      chart.redraw();
-      return { highs, lows };
-      
-    } catch (error) {
-      console.error('Error in alternative pivot method:', error);
-      return { highs: [], lows: [] };
+      console.error('Error adding Geometric Trend Line:', error);
     }
   }
-};
+
+  _createTrendLine(chart, visibleRange) {
+    try {
+      // Find swing points in the visible range
+      const swingPoints = this._findSwingPoints(chart, visibleRange);
+      
+      // If we have enough swing points, create a trend line
+      if (swingPoints.length >= this.settings.minimumSwings) {
+        // Use linear regression to find best fit line
+        const trendLinePoints = this._calculateTrendLine(swingPoints);
+        
+        if (trendLinePoints.length >= 2) {
+          // Create a trend line shape
+          const shape = chart.createMultipointShape(
+            trendLinePoints.map(point => ({ time: point.time, price: point.price })),
+            {
+              shape: 'trend_line',
+              lock: false,
+              disableSelection: false,
+              disableSave: false,
+              disableUndo: false,
+              overrides: {
+                linecolor: this.settings.lineColor,
+                linewidth: this.settings.lineWidth,
+                linestyle: this.settings.lineStyle,
+                extendLeft: true,
+                extendRight: true,
+                leftEnd: 0,
+                rightEnd: 0
+              },
+              zOrder: 'top',
+              showInObjectsTree: true,
+            }
+          );
+          
+          // Track this instance
+          this._trackInstance(shape);
+        }
+      }
+    } catch (error) {
+      console.error('Error creating geometric trend line:', error);
+    }
+  }
+
+  _findSwingPoints(chart, visibleRange) {
+    // This would be a more complex algorithm to identify swing highs and lows
+    // For demonstration, we'll just use some simplified logic
+
+    const swingPoints = [];
+    
+    try {
+      // Get data in the visible range
+      const bars = chart.barsCount();
+      const resolution = chart.resolution();
+      
+      // Sample points - in a real implementation, this would analyze price action
+      const startBar = Math.max(0, bars - this.settings.lookbackBars);
+      const endBar = bars - 1;
+      
+      for (let i = startBar; i <= endBar; i += Math.ceil(this.settings.lookbackBars / 5)) {
+        const time = chart.getVisibleRange().from + (i * (chart.getVisibleRange().to - chart.getVisibleRange().from) / bars);
+        // This is simplified - in reality, you'd find actual swing points
+        const price = Math.random() * chart.priceScale().getCoordFromPrice(chart.priceScale().containerPointToPrice(100));
+        
+        swingPoints.push({ time, price });
+      }
+    } catch (error) {
+      console.error('Error finding swing points:', error);
+    }
+    
+    return swingPoints;
+  }
+
+  _calculateTrendLine(points) {
+    // Simplified linear regression
+    // In a real implementation, this would use proper linear regression
+    
+    if (points.length < 2) return [];
+    
+    // Sort points by time
+    const sortedPoints = [...points].sort((a, b) => a.time - b.time);
+    
+    // For demonstration, just return first and last points
+    return [sortedPoints[0], sortedPoints[sortedPoints.length - 1]];
+  }
+
+  _updateTrendLines(chart) {
+    // First remove all existing lines
+    this.remove(chart);
+    
+    // Then recreate them for new range
+    this._createTrendLine(chart, chart.getVisibleRange());
+  }
+}
+
+/**
+ * Gann Square Angle Indicator
+ * 
+ * Draws Gann angle lines (1x1, 2x1, etc.) from significant price points
+ */
+export class GannAngleIndicator extends CustomIndicator {
+  constructor() {
+    super(
+      'gann_angles',
+      'Gann Angles',
+      'Draws Gann angle lines (1x1, 2x1, etc.) from significant price points'
+    );
+    
+    this.settings = {
+      baseLineColor: '#FF6D00',
+      angle45Color: '#2196F3',
+      angle26Color: '#4CAF50',
+      angle63Color: '#FFC107',
+      lineWidth: 1,
+      lineStyle: 2, // dashed
+      anchorToRecent: true, // anchor to most recent significant low/high
+    };
+  }
+
+  register(chart, widget) {
+    console.log('Registered Gann Angle indicator');
+  }
+
+  add(chart, widget) {
+    super.add(chart, widget);
+    
+    try {
+      // Get visible range
+      const visibleRange = chart.getVisibleRange();
+      
+      // Find anchor point (recent significant low or high)
+      const anchorPoint = this._findAnchorPoint(chart, visibleRange);
+      
+      if (anchorPoint) {
+        // Draw Gann angles from anchor point
+        this._drawGannAngles(chart, anchorPoint);
+      }
+      
+      // Subscribe to visible range changes
+      widget.subscribe('visibleRangeChanged', () => {
+        if (this.isActive) {
+          // Update Gann angles when range changes
+          this._updateGannAngles(chart);
+        }
+      });
+    } catch (error) {
+      console.error('Error adding Gann Angles:', error);
+    }
+  }
+
+  _findAnchorPoint(chart, visibleRange) {
+    // In a real implementation, this would find significant lows/highs
+    // For demonstration, we'll use a simplified approach
+    
+    try {
+      // Get the most recent price
+      const symbolInfo = chart.symbolInfo();
+      if (!symbolInfo) return null;
+      
+      // For demonstration, use the start of the visible range
+      return {
+        time: visibleRange.from,
+        price: chart.priceScale().containerPointToPrice(chart.priceScale().height() / 2)
+      };
+    } catch (error) {
+      console.error('Error finding anchor point:', error);
+      return null;
+    }
+  }
+
+  _drawGannAngles(chart, anchorPoint) {
+    try {
+      const visibleRange = chart.getVisibleRange();
+      const timeRange = visibleRange.to - visibleRange.from;
+      const priceScale = chart.priceScale();
+      
+      // Calculate price range per time unit (for 1x1 angle)
+      const barCount = chart.barsCount();
+      const pixelsPerBar = chart.timeScale().width() / barCount;
+      const pricePerBar = priceScale.height() / priceScale.priceRange().length();
+      
+      // For a 1x1 angle (45 degrees), price change equals time change
+      const timeOffset = timeRange * 0.3; // 30% of visible time range
+      const endTime = anchorPoint.time + timeOffset;
+      
+      // Draw 1x1 (45°) angle
+      const shape45 = this._createAngleLine(
+        chart, 
+        anchorPoint, 
+        { time: endTime, price: anchorPoint.price + (timeOffset * pricePerBar / pixelsPerBar) },
+        this.settings.angle45Color
+      );
+      this._trackInstance(shape45);
+      
+      // Draw 2x1 (26.57°) angle
+      const shape26 = this._createAngleLine(
+        chart, 
+        anchorPoint, 
+        { time: endTime, price: anchorPoint.price + (timeOffset * pricePerBar / pixelsPerBar / 2) },
+        this.settings.angle26Color
+      );
+      this._trackInstance(shape26);
+      
+      // Draw 1x2 (63.43°) angle
+      const shape63 = this._createAngleLine(
+        chart, 
+        anchorPoint, 
+        { time: endTime, price: anchorPoint.price + (timeOffset * pricePerBar / pixelsPerBar * 2) },
+        this.settings.angle63Color
+      );
+      this._trackInstance(shape63);
+    } catch (error) {
+      console.error('Error drawing Gann angles:', error);
+    }
+  }
+
+  _createAngleLine(chart, startPoint, endPoint, color) {
+    return chart.createMultipointShape(
+      [
+        { time: startPoint.time, price: startPoint.price },
+        { time: endPoint.time, price: endPoint.price }
+      ],
+      {
+        shape: 'ray',
+        lock: false,
+        disableSelection: false,
+        disableSave: false,
+        disableUndo: false,
+        overrides: {
+          linecolor: color,
+          linewidth: this.settings.lineWidth,
+          linestyle: this.settings.lineStyle
+        },
+        zOrder: 'top',
+        showInObjectsTree: true,
+      }
+    );
+  }
+
+  _updateGannAngles(chart) {
+    // First remove all existing angles
+    this.remove(chart);
+    
+    // Then recreate them for new range
+    const visibleRange = chart.getVisibleRange();
+    const anchorPoint = this._findAnchorPoint(chart, visibleRange);
+    
+    if (anchorPoint) {
+      this._drawGannAngles(chart, anchorPoint);
+    }
+  }
+}
+
+/**
+ * Fibonacci Retracement Indicator
+ * 
+ * Automatically identifies swing highs and lows and draws Fibonacci retracements
+ */
+export class FibonacciRetracement extends CustomIndicator {
+  constructor() {
+    super(
+      'fib_retracement',
+      'Auto Fibonacci',
+      'Automatically identifies swing highs and lows and draws Fibonacci retracements'
+    );
+    
+    this.settings = {
+      levels: [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1],
+      colors: ['#787B86', '#2962FF', '#2962FF', '#2962FF', '#2962FF', '#2962FF', '#787B86'],
+      lineWidth: 1,
+      lineStyle: 0, // solid
+    };
+  }
+
+  register(chart, widget) {
+    console.log('Registered Auto Fibonacci indicator');
+  }
+  
+  add(chart, widget) {
+    super.add(chart, widget);
+    
+    try {
+      // Find recent swing high and low
+      const [swingLow, swingHigh] = this._findRecentSwing(chart);
+      
+      if (swingLow && swingHigh) {
+        // Draw Fibonacci retracement
+        this._drawFibonacciRetracement(chart, swingLow, swingHigh);
+      }
+      
+      // Subscribe to visible range changes
+      widget.subscribe('visibleRangeChanged', () => {
+        if (this.isActive) {
+          // Update Fibonacci retracement when range changes
+          this._updateFibonacciRetracement(chart);
+        }
+      });
+    } catch (error) {
+      console.error('Error adding Fibonacci Retracement:', error);
+    }
+  }
+
+  _findRecentSwing(chart) {
+    // This would be a more complex algorithm to identify recent swing high and low
+    // For demonstration, we'll use a simplified approach
+    
+    try {
+      const visibleRange = chart.getVisibleRange();
+      const timeRange = visibleRange.to - visibleRange.from;
+      
+      // For demonstration, use 30% and 70% of visible range
+      const swingLowTime = visibleRange.from + timeRange * 0.3;
+      const swingHighTime = visibleRange.from + timeRange * 0.7;
+      
+      const priceScale = chart.priceScale();
+      const priceRange = priceScale.priceRange();
+      
+      if (!priceRange) return [null, null];
+      
+      const priceMid = priceScale.containerPointToPrice(priceScale.height() / 2);
+      const priceAmplitude = priceRange.length() * 0.1; // 10% of visible price range
+      
+      const swingLow = {
+        time: swingLowTime,
+        price: priceMid - priceAmplitude
+      };
+      
+      const swingHigh = {
+        time: swingHighTime,
+        price: priceMid + priceAmplitude
+      };
+      
+      return [swingLow, swingHigh];
+    } catch (error) {
+      console.error('Error finding swing points:', error);
+      return [null, null];
+    }
+  }
+
+  _drawFibonacciRetracement(chart, swingLow, swingHigh) {
+    try {
+      // Create the Fibonacci retracement
+      const shape = chart.createMultipointShape(
+        [
+          { time: swingLow.time, price: swingLow.price },
+          { time: swingHigh.time, price: swingHigh.price }
+        ],
+        {
+          shape: 'fib_retracement',
+          lock: false,
+          disableSelection: false,
+          disableSave: false,
+          disableUndo: false,
+          overrides: {
+            // Set properties for each level
+            ...this.settings.levels.reduce((acc, level, index) => {
+              acc[`level${index+1}Visible`] = true;
+              acc[`level${index+1}`] = level;
+              acc[`level${index+1}Color`] = this.settings.colors[index];
+              acc[`level${index+1}Width`] = this.settings.lineWidth;
+              acc[`level${index+1}Style`] = this.settings.lineStyle;
+              return acc;
+            }, {}),
+            // Common properties
+            extendLines: false,
+            extendLeft: false,
+            extendRight: false,
+            reverse: false,
+            fibLevelsBasedOnLogScale: false,
+          },
+          zOrder: 'top',
+          showInObjectsTree: true,
+        }
+      );
+      
+      this._trackInstance(shape);
+    } catch (error) {
+      console.error('Error drawing Fibonacci retracement:', error);
+    }
+  }
+
+  _updateFibonacciRetracement(chart) {
+    // First remove all existing retracements
+    this.remove(chart);
+    
+    // Then recreate them for new range
+    const [swingLow, swingHigh] = this._findRecentSwing(chart);
+    
+    if (swingLow && swingHigh) {
+      this._drawFibonacciRetracement(chart, swingLow, swingHigh);
+    }
+  }
+}
+
+// Export a collection of all available indicators
+export const availableIndicators = [
+  new GeometricTrendLine(),
+  new GannAngleIndicator(),
+  new FibonacciRetracement()
+];

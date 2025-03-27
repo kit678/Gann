@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST={}
+self.__REACT_LOADABLE_MANIFEST={"tradingview-advanced.js -> ../components/TradingViewSimpleChart":{"id":"tradingview-advanced.js -> ../components/TradingViewSimpleChart","files":["static/chunks/components_TradingViewSimpleChart_js.js"]}}

@@ -1,6 +1,206 @@
 import React, { useState, useEffect, useRef } from 'react';
+import styled from 'styled-components';
 import { BacktestEngine } from '../utils/backtesting';
 import { pivotAngleRule, trendlineBreakRule, candleAngleIntersectionRule, createExitRules } from '../utils/tradingRules';
+
+const PanelContainer = styled.div`
+  background-color: #131722;
+  color: #d1d4dc;
+  border-radius: 4px;
+  border: 1px solid #2a2e39;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  padding: 16px;
+  margin-top: 16px;
+  width: 100%;
+  height: ${props => props.isCollapsed ? '50px' : '250px'};
+  transition: height 0.3s ease;
+  overflow: hidden;
+  position: relative;
+`;
+
+const Header = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: ${props => props.isCollapsed ? '0' : '16px'};
+`;
+
+const Title = styled.h3`
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+`;
+
+const ToggleButton = styled.button`
+  background: none;
+  border: none;
+  color: #5d9cf5;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 8px;
+  
+  &:hover {
+    background-color: rgba(93, 156, 245, 0.1);
+    border-radius: 4px;
+  }
+`;
+
+const Content = styled.div`
+  display: ${props => props.isCollapsed ? 'none' : 'flex'};
+  flex-direction: column;
+  height: calc(100% - 40px);
+  overflow-y: auto;
+`;
+
+const TabsContainer = styled.div`
+  display: flex;
+  border-bottom: 1px solid #2a2e39;
+  margin-bottom: 16px;
+`;
+
+const Tab = styled.div`
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  border-bottom: 2px solid ${props => props.active ? '#5d9cf5' : 'transparent'};
+  color: ${props => props.active ? '#d1d4dc' : '#787b86'};
+  
+  &:hover {
+    color: ${props => props.active ? '#d1d4dc' : '#a3a6af'};
+  }
+`;
+
+const ControlsRow = styled.div`
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+`;
+
+const Button = styled.button`
+  background-color: ${props => props.primary ? '#5d9cf5' : '#2a2e39'};
+  color: #d1d4dc;
+  border: 1px solid ${props => props.primary ? '#5d9cf5' : '#363c4e'};
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  
+  &:hover {
+    background-color: ${props => props.primary ? '#4a8be0' : '#363c4e'};
+  }
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const Select = styled.select`
+  background-color: #2a2e39;
+  color: #d1d4dc;
+  border: 1px solid #363c4e;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
+  min-width: 150px;
+  
+  &:focus {
+    outline: none;
+    border-color: #5d9cf5;
+  }
+`;
+
+const Input = styled.input`
+  background-color: #2a2e39;
+  color: #d1d4dc;
+  border: 1px solid #363c4e;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
+  width: 100px;
+  
+  &:focus {
+    outline: none;
+    border-color: #5d9cf5;
+  }
+  
+  &[type="checkbox"] {
+    width: auto;
+  }
+`;
+
+const Label = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #a3a6af;
+`;
+
+const ResultsContainer = styled.div`
+  flex: 1;
+  overflow-y: auto;
+  font-size: 14px;
+`;
+
+const ResultsTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  
+  th, td {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid #2a2e39;
+  }
+  
+  th {
+    color: #787b86;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    background-color: #131722;
+  }
+  
+  tbody tr:hover {
+    background-color: rgba(93, 156, 245, 0.05);
+  }
+`;
+
+const MetricsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+`;
+
+const MetricCard = styled.div`
+  background-color: #1c2030;
+  border-radius: 4px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+`;
+
+const MetricTitle = styled.div`
+  font-size: 12px;
+  color: #787b86;
+  margin-bottom: 4px;
+`;
+
+const MetricValue = styled.div`
+  font-size: 18px;
+  font-weight: 600;
+  color: ${props => {
+    if (props.positive) return '#4caf50';
+    if (props.negative) return '#f44336';
+    return '#d1d4dc';
+  }};
+`;
 
 /**
  * Backtesting Panel Component
@@ -41,6 +241,25 @@ const BacktestingPanel = ({ data, chartInstance, priceToBarRatio }) => {
       stopLoss: 2
     }
   });
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [activeTab, setActiveTab] = useState('setup');
+  const [isBacktesting, setIsBacktesting] = useState(false);
+  const [replaySpeed, setReplaySpeed] = useState('normal');
+  const [selectedIndicators, setSelectedIndicators] = useState([]);
+  const [metrics, setMetrics] = useState({
+    totalTrades: 0,
+    winRate: 0,
+    averageReturn: 0,
+    maxDrawdown: 0,
+    profitFactor: 0,
+    sharpeRatio: 0
+  });
+  const backtestTimerRef = useRef(null);
+  const tradesRef = useRef([]);
+  const startTimeRef = useRef(null);
+  const endTimeRef = useRef(null);
+  const initialCapitalRef = useRef(10000);
+  const currentEquityRef = useRef(10000);
   
   // Initialize backtest engine
   useEffect(() => {
@@ -271,274 +490,447 @@ const BacktestingPanel = ({ data, chartInstance, priceToBarRatio }) => {
     }));
   };
   
-  return (
-    <div className="backtesting-panel bg-white rounded-lg shadow-md p-4 mb-6">
-      <h2 className="text-xl font-semibold mb-4">Backtesting</h2>
-      
-      {/* Control Panel */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {!isRunning ? (
-          <button 
-            onClick={startBacktest}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-            disabled={!isInitialized}
-          >
-            Start Backtest
-          </button>
-        ) : isPaused ? (
-          <button 
-            onClick={resumeBacktest}
-            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
-          >
-            Resume
-          </button>
-        ) : (
-          <button 
-            onClick={pauseBacktest}
-            className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded"
-          >
-            Pause
-          </button>
-        )}
-        
-        {isRunning && (
-          <button 
-            onClick={stopBacktest}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
-          >
-            Stop
-          </button>
-        )}
-        
-        <button 
-          onClick={stepBackward}
-          className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded"
-          disabled={!isRunning || currentIndex <= 0}
-        >
-          &lt;
-        </button>
-        
-        <button 
-          onClick={stepForward}
-          className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded"
-          disabled={!isInitialized || (isRunning && currentIndex >= backtestEngineRef.current?.data.length - 1)}
-        >
-          &gt;
-        </button>
-        
-        <div className="flex items-center ml-4">
-          <label className="mr-2">Speed:</label>
-          <select 
-            value={playbackSpeed}
-            onChange={(e) => changeSpeed(Number(e.target.value))}
-            className="border rounded px-2 py-1"
-          >
-            <option value={0.25}>0.25x</option>
-            <option value={0.5}>0.5x</option>
-            <option value={1}>1x</option>
-            <option value={2}>2x</option>
-            <option value={5}>5x</option>
-            <option value={10}>10x</option>
-          </select>
-        </div>
-      </div>
-      
-      {/* Progress Bar */}
-      {isRunning && (
-        <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
-          <div 
-            className="bg-blue-600 h-2.5 rounded-full" 
-            style={{ width: `${progress}%` }}
-          ></div>
-        </div>
-      )}
-      
-      {/* Rules Configuration */}
-      <div className="mb-4">
-        <h3 className="text-lg font-medium mb-2">Trading Rules</h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Pivot Angle Rule */}
-          <div className="border rounded p-3">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="font-medium">Pivot Angle Pattern</h4>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  className="sr-only peer"
-                  checked={selectedRules.pivotAngle}
-                  onChange={() => toggleRule('pivotAngle')}
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              </label>
-            </div>
+  // Detect bar replay mode changes
+  useEffect(() => {
+    if (!chartInstance) return;
+    
+    const checkReplayMode = () => {
+      if (chartInstance && chartInstance.chart) {
+        try {
+          // In a real implementation, you would detect bar replay mode changes
+          // This is a placeholder for the real implementation
+          const isInReplayMode = false; // chartInstance.chart().isInReplayMode()
+          
+          if (isInReplayMode !== isBacktesting) {
+            setIsBacktesting(isInReplayMode);
             
-            <div className="space-y-2">
-              <div className="flex flex-col">
-                <label className="text-sm text-gray-600">Angle Range</label>
-                <div className="flex items-center space-x-2">
-                  <input 
-                    type="number" 
-                    className="border rounded px-2 py-1 w-20"
-                    value={ruleParams.pivotAngle.minAngle}
-                    onChange={(e) => updateRuleParam('pivotAngle', 'minAngle', Number(e.target.value))}
-                    min="0"
-                    max="90"
-                    disabled={!selectedRules.pivotAngle}
-                  />
-                  <span>to</span>
-                  <input 
-                    type="number" 
-                    className="border rounded px-2 py-1 w-20"
-                    value={ruleParams.pivotAngle.maxAngle}
-                    onChange={(e) => updateRuleParam('pivotAngle', 'maxAngle', Number(e.target.value))}
-                    min="0"
-                    max="90"
-                    disabled={!selectedRules.pivotAngle}
-                  />
-                  <span>degrees</span>
-                </div>
-              </div>
-              
-              <div className="flex flex-col">
-                <label className="text-sm text-gray-600">Direction</label>
-                <select 
-                  className="border rounded px-2 py-1"
-                  value={ruleParams.pivotAngle.direction}
-                  onChange={(e) => updateRuleParam('pivotAngle', 'direction', e.target.value)}
-                  disabled={!selectedRules.pivotAngle}
-                >
-                  <option value="up">Bullish (Up)</option>
-                  <option value="down">Bearish (Down)</option>
-                </select>
-              </div>
-              
-              <div className="flex flex-col">
-                <label className="text-sm text-gray-600">Pivot Lookback</label>
-                <input 
+            if (isInReplayMode) {
+              // Replay mode started
+              startBacktest();
+            } else {
+              // Replay mode ended
+              endBacktest();
+            }
+          }
+        } catch (error) {
+          console.error('Error checking replay mode:', error);
+        }
+      }
+    };
+    
+    // Check initial state
+    checkReplayMode();
+    
+    // Set up interval to check for replay mode changes
+    const interval = setInterval(checkReplayMode, 1000);
+    return () => clearInterval(interval);
+  }, [chartInstance, isBacktesting]);
+  
+  // Handle component unmount
+  useEffect(() => {
+    return () => {
+      if (backtestTimerRef.current) {
+        clearInterval(backtestTimerRef.current);
+      }
+    };
+  }, []);
+  
+  const endBacktest = () => {
+    if (backtestTimerRef.current) {
+      clearInterval(backtestTimerRef.current);
+      backtestTimerRef.current = null;
+    }
+    
+    endTimeRef.current = new Date();
+    setIsBacktesting(false);
+    
+    // Calculate final results
+    calculateResults();
+  };
+  
+  const checkForSignals = () => {
+    if (!chartInstance || !selectedIndicators.length) return;
+    
+    try {
+      // Get current bar info
+      const chart = chartInstance.chart();
+      const visibleRange = chart.getVisibleRange();
+      const currentTime = chart.getVisibleTime();
+      
+      // In a real implementation, you would:
+      // 1. Check each indicator for signals at the current bar
+      // 2. Record any trades that would be taken
+      // 3. Calculate performance metrics
+      
+      // Mock implementation for demonstration
+      if (Math.random() < 0.02) { // 2% chance of signal
+        const randomIndicator = selectedIndicators[Math.floor(Math.random() * selectedIndicators.length)];
+        const isBuy = Math.random() > 0.5;
+        
+        // Mock price data
+        const price = 100 + Math.random() * 20;
+        
+        // Add trade to history
+        tradesRef.current.push({
+          time: new Date(),
+          indicatorId: randomIndicator,
+          type: isBuy ? 'buy' : 'sell',
+          price,
+          quantity: 1,
+          equity: currentEquityRef.current
+        });
+        
+        // Update equity
+        if (isBuy) {
+          currentEquityRef.current -= price;
+        } else {
+          currentEquityRef.current += price;
+        }
+      }
+    } catch (error) {
+      console.error('Error checking for signals:', error);
+    }
+  };
+  
+  const calculateResults = () => {
+    const trades = tradesRef.current;
+    
+    if (!trades.length) {
+      setResults([]);
+      setMetrics({
+        totalTrades: 0,
+        winRate: 0,
+        averageReturn: 0,
+        maxDrawdown: 0,
+        profitFactor: 0,
+        sharpeRatio: 0
+      });
+      return;
+    }
+    
+    // Group trades by indicator
+    const indicatorPerformance = {};
+    
+    selectedIndicators.forEach(indicator => {
+      indicatorPerformance[indicator] = {
+        trades: 0,
+        wins: 0,
+        losses: 0,
+        profitSum: 0,
+        lossSum: 0,
+        returns: []
+      };
+    });
+    
+    // Process trades
+    let maxEquity = initialCapitalRef.current;
+    let minEquity = initialCapitalRef.current;
+    let currentDrawdown = 0;
+    let maxDrawdown = 0;
+    
+    // Simulate trade processing
+    trades.forEach((trade, index) => {
+      const indicator = trade.indicatorId;
+      
+      if (!indicatorPerformance[indicator]) return;
+      
+      indicatorPerformance[indicator].trades++;
+      
+      // In a real implementation, you would calculate actual profit/loss
+      // This is a mock implementation
+      const isWin = Math.random() > 0.4; // 60% win rate for demo
+      const pnl = isWin ? Math.random() * 100 + 10 : -(Math.random() * 100 + 10);
+      
+      if (isWin) {
+        indicatorPerformance[indicator].wins++;
+        indicatorPerformance[indicator].profitSum += pnl;
+      } else {
+        indicatorPerformance[indicator].losses++;
+        indicatorPerformance[indicator].lossSum += Math.abs(pnl);
+      }
+      
+      indicatorPerformance[indicator].returns.push(pnl);
+      
+      // Track equity and drawdown
+      const equity = trade.equity;
+      maxEquity = Math.max(maxEquity, equity);
+      
+      if (equity < maxEquity) {
+        currentDrawdown = (maxEquity - equity) / maxEquity * 100;
+        maxDrawdown = Math.max(maxDrawdown, currentDrawdown);
+      }
+    });
+    
+    // Calculate metrics for each indicator
+    const results = Object.keys(indicatorPerformance).map(indicator => {
+      const perf = indicatorPerformance[indicator];
+      const winRate = perf.trades > 0 ? (perf.wins / perf.trades * 100) : 0;
+      const avgReturn = perf.trades > 0 ? perf.returns.reduce((sum, val) => sum + val, 0) / perf.trades : 0;
+      const profitFactor = perf.lossSum > 0 ? perf.profitSum / perf.lossSum : perf.profitSum > 0 ? Infinity : 0;
+      
+      // Calculate Sharpe Ratio
+      const returns = perf.returns;
+      const meanReturn = returns.length > 0 ? returns.reduce((sum, val) => sum + val, 0) / returns.length : 0;
+      const variance = returns.length > 0 ? 
+        returns.reduce((sum, val) => sum + Math.pow(val - meanReturn, 2), 0) / returns.length : 0;
+      const stdDev = Math.sqrt(variance);
+      const sharpeRatio = stdDev > 0 ? meanReturn / stdDev : 0;
+      
+      return {
+        indicator,
+        trades: perf.trades,
+        winRate: winRate.toFixed(2),
+        averageReturn: avgReturn.toFixed(2),
+        profitFactor: profitFactor.toFixed(2),
+        sharpeRatio: sharpeRatio.toFixed(2)
+      };
+    });
+    
+    // Calculate overall metrics
+    const totalTrades = trades.length;
+    const winningTrades = trades.filter((_, index) => Math.random() > 0.4).length; // Mock win rate
+    const winRate = totalTrades > 0 ? (winningTrades / totalTrades * 100) : 0;
+    const returns = trades.map((_, index) => 
+      Math.random() > 0.4 ? Math.random() * 100 + 10 : -(Math.random() * 100 + 10)
+    );
+    const averageReturn = returns.length > 0 ? 
+      returns.reduce((sum, val) => sum + val, 0) / returns.length : 0;
+    const profitSum = returns.filter(r => r > 0).reduce((sum, val) => sum + val, 0);
+    const lossSum = Math.abs(returns.filter(r => r < 0).reduce((sum, val) => sum + val, 0));
+    const profitFactor = lossSum > 0 ? profitSum / lossSum : profitSum > 0 ? Infinity : 0;
+    
+    // Calculate Sharpe Ratio
+    const meanReturn = returns.length > 0 ? returns.reduce((sum, val) => sum + val, 0) / returns.length : 0;
+    const variance = returns.length > 0 ? 
+      returns.reduce((sum, val) => sum + Math.pow(val - meanReturn, 2), 0) / returns.length : 0;
+    const stdDev = Math.sqrt(variance);
+    const sharpeRatio = stdDev > 0 ? meanReturn / stdDev : 0;
+    
+    setResults(results);
+    setMetrics({
+      totalTrades,
+      winRate: winRate.toFixed(2),
+      averageReturn: averageReturn.toFixed(2),
+      maxDrawdown: maxDrawdown.toFixed(2),
+      profitFactor: profitFactor.toFixed(2),
+      sharpeRatio: sharpeRatio.toFixed(2)
+    });
+  };
+  
+  const toggleCollapse = () => {
+    setIsCollapsed(!isCollapsed);
+  };
+  
+  const handleIndicatorToggle = (indicatorId) => {
+    const isSelected = selectedIndicators.includes(indicatorId);
+    let newSelectedIndicators;
+    
+    if (isSelected) {
+      newSelectedIndicators = selectedIndicators.filter(id => id !== indicatorId);
+    } else {
+      newSelectedIndicators = [...selectedIndicators, indicatorId];
+    }
+    
+    setSelectedIndicators(newSelectedIndicators);
+  };
+  
+  const handleStartBacktest = () => {
+    if (isBacktesting) {
+      endBacktest();
+    } else {
+      startBacktest();
+    }
+  };
+  
+  const handleSpeedChange = (e) => {
+    setReplaySpeed(e.target.value);
+    
+    if (chartInstance && chartInstance.chart) {
+      try {
+        // Mock implementation - in a real case, you would call the appropriate API
+        console.log('Setting replay speed to', e.target.value);
+        // chartInstance.chart().setReplaySpeed(e.target.value);
+      } catch (error) {
+        console.error('Error setting replay speed:', error);
+      }
+    }
+  };
+  
+  const renderSetupTab = () => {
+    return (
+      <>
+        <ControlsRow>
+          <Label>
+            Initial Capital:
+            <Input 
                   type="number" 
-                  className="border rounded px-2 py-1"
-                  value={ruleParams.pivotAngle.pivotLookback}
-                  onChange={(e) => updateRuleParam('pivotAngle', 'pivotLookback', Number(e.target.value))}
+              value={initialCapitalRef.current}
+              onChange={(e) => initialCapitalRef.current = parseFloat(e.target.value)} 
                   min="1"
-                  max="20"
-                  disabled={!selectedRules.pivotAngle}
-                />
-              </div>
-            </div>
-          </div>
+            />
+          </Label>
           
-          {/* Take Profit / Stop Loss */}
-          <div className="border rounded p-3">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="font-medium">Take Profit / Stop Loss</h4>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  className="sr-only peer"
-                  checked={selectedRules.takeProfitStopLoss}
-                  onChange={() => toggleRule('takeProfitStopLoss')}
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              </label>
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex flex-col">
-                <label className="text-sm text-gray-600">Take Profit (%)</label>
-                <input 
-                  type="number" 
-                  className="border rounded px-2 py-1"
-                  value={ruleParams.takeProfitStopLoss.takeProfit}
-                  onChange={(e) => updateRuleParam('takeProfitStopLoss', 'takeProfit', Number(e.target.value))}
-                  min="0.1"
-                  step="0.1"
-                  disabled={!selectedRules.takeProfitStopLoss}
-                />
-              </div>
-              
-              <div className="flex flex-col">
-                <label className="text-sm text-gray-600">Stop Loss (%)</label>
-                <input 
-                  type="number" 
-                  className="border rounded px-2 py-1"
-                  value={ruleParams.takeProfitStopLoss.stopLoss}
-                  onChange={(e) => updateRuleParam('takeProfitStopLoss', 'stopLoss', Number(e.target.value))}
-                  min="0.1"
-                  step="0.1"
-                  disabled={!selectedRules.takeProfitStopLoss}
-                />
-              </div>
-            </div>
-          </div>
+          <Label>
+            Replay Speed:
+            <Select value={replaySpeed} onChange={handleSpeedChange}>
+              <option value="0.25">0.25x</option>
+              <option value="0.5">0.5x</option>
+              <option value="normal">1x</option>
+              <option value="2">2x</option>
+              <option value="4">4x</option>
+            </Select>
+          </Label>
+          
+          <Button 
+            primary={isBacktesting} 
+            onClick={handleStartBacktest}
+          >
+            {isBacktesting ? 'Stop Backtest' : 'Start Backtest'}
+          </Button>
+        </ControlsRow>
+        
+        <div>
+          <div style={{ marginBottom: '8px', color: '#a3a6af', fontSize: '14px' }}>Select Indicators to Analyze:</div>
+          
+          {/* Add your custom indicators here */}
+          {/* For example: */}
+          {/* <Label key="custom-indicator-1" style={{ marginBottom: '8px' }}>
+            <Input 
+              type="checkbox" 
+              checked={selectedIndicators.includes('custom-indicator-1')}
+              onChange={() => handleIndicatorToggle('custom-indicator-1')}
+            />
+            Custom Indicator 1
+          </Label> */}
         </div>
-      </div>
+      </>
+    );
+  };
+  
+  const renderResultsTab = () => {
+    return (
+      <>
+        <MetricsGrid>
+          <MetricCard>
+            <MetricTitle>Total Trades</MetricTitle>
+            <MetricValue>{metrics.totalTrades}</MetricValue>
+          </MetricCard>
+          
+          <MetricCard>
+            <MetricTitle>Win Rate</MetricTitle>
+            <MetricValue 
+              positive={parseFloat(metrics.winRate) > 50}
+              negative={parseFloat(metrics.winRate) < 50}
+            >
+              {metrics.winRate}%
+            </MetricValue>
+          </MetricCard>
+          
+          <MetricCard>
+            <MetricTitle>Average Return</MetricTitle>
+            <MetricValue 
+              positive={parseFloat(metrics.averageReturn) > 0}
+              negative={parseFloat(metrics.averageReturn) < 0}
+            >
+              ${metrics.averageReturn}
+            </MetricValue>
+          </MetricCard>
+          
+          <MetricCard>
+            <MetricTitle>Max Drawdown</MetricTitle>
+            <MetricValue negative={true}>
+              {metrics.maxDrawdown}%
+            </MetricValue>
+          </MetricCard>
+          
+          <MetricCard>
+            <MetricTitle>Profit Factor</MetricTitle>
+            <MetricValue 
+              positive={parseFloat(metrics.profitFactor) > 1}
+              negative={parseFloat(metrics.profitFactor) < 1}
+            >
+              {metrics.profitFactor}
+            </MetricValue>
+          </MetricCard>
+          
+          <MetricCard>
+            <MetricTitle>Sharpe Ratio</MetricTitle>
+            <MetricValue 
+              positive={parseFloat(metrics.sharpeRatio) > 1}
+              negative={parseFloat(metrics.sharpeRatio) < 0}
+            >
+              {metrics.sharpeRatio}
+            </MetricValue>
+          </MetricCard>
+        </MetricsGrid>
+        
+        <ResultsContainer>
+          <ResultsTable>
+            <thead>
+              <tr>
+                <th>Indicator</th>
+                <th>Trades</th>
+                <th>Win Rate</th>
+                <th>Avg Return</th>
+                <th>Profit Factor</th>
+                <th>Sharpe Ratio</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.length > 0 ? (
+                results.map(result => (
+                  <tr key={result.indicator}>
+                    <td>{result.indicator}</td>
+                    <td>{result.trades}</td>
+                    <td>{result.winRate}%</td>
+                    <td>${result.averageReturn}</td>
+                    <td>{result.profitFactor}</td>
+                    <td>{result.sharpeRatio}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', color: '#787b86', padding: '20px' }}>
+                    {isBacktesting ? 'Collecting data...' : 'No results available. Run a backtest to see indicator performance.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </ResultsTable>
+        </ResultsContainer>
+      </>
+    );
+  };
+  
+  return (
+    <PanelContainer isCollapsed={isCollapsed}>
+      <Header isCollapsed={isCollapsed}>
+        <Title>Backtesting {isBacktesting && '(Running...)'}</Title>
+        <ToggleButton onClick={toggleCollapse}>
+          {isCollapsed ? 'Expand' : 'Collapse'}
+        </ToggleButton>
+      </Header>
       
-      {/* Results Panel */}
-      {results && (
-        <div className="mt-4 border-t pt-4">
-          <h3 className="text-lg font-medium mb-2">Results</h3>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-gray-50 p-3 rounded">
-              <div className="text-sm text-gray-500">Return</div>
-              <div className={`text-xl font-bold ${results.percentReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {results.percentReturn.toFixed(2)}%
-              </div>
-            </div>
-            
-            <div className="bg-gray-50 p-3 rounded">
-              <div className="text-sm text-gray-500">Win Rate</div>
-              <div className="text-xl font-bold">
-                {results.winRate.toFixed(2)}%
-              </div>
-            </div>
-            
-            <div className="bg-gray-50 p-3 rounded">
-              <div className="text-sm text-gray-500">Profit Factor</div>
-              <div className="text-xl font-bold">
-                {results.profitFactor.toFixed(2)}
-              </div>
-            </div>
-            
-            <div className="bg-gray-50 p-3 rounded">
-              <div className="text-sm text-gray-500">Max Drawdown</div>
-              <div className="text-xl font-bold text-red-600">
-                {results.maxDrawdownPercent.toFixed(2)}%
-              </div>
-            </div>
-            
-            <div className="bg-gray-50 p-3 rounded">
-              <div className="text-sm text-gray-500">Total Trades</div>
-              <div className="text-xl font-bold">
-                {results.trades}
-              </div>
-            </div>
-            
-            <div className="bg-gray-50 p-3 rounded">
-              <div className="text-sm text-gray-500">Winning Trades</div>
-              <div className="text-xl font-bold text-green-600">
-                {results.winningTrades}
-              </div>
-            </div>
-            
-            <div className="bg-gray-50 p-3 rounded">
-              <div className="text-sm text-gray-500">Losing Trades</div>
-              <div className="text-xl font-bold text-red-600">
-                {results.losingTrades}
-              </div>
-            </div>
-            
-            <div className="bg-gray-50 p-3 rounded">
-              <div className="text-sm text-gray-500">Final Balance</div>
-              <div className="text-xl font-bold">
-                ${results.finalBalance.toFixed(2)}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      <Content isCollapsed={isCollapsed}>
+        <TabsContainer>
+          <Tab 
+            active={activeTab === 'setup'} 
+            onClick={() => setActiveTab('setup')}
+          >
+            Setup
+          </Tab>
+          <Tab 
+            active={activeTab === 'results'} 
+            onClick={() => setActiveTab('results')}
+          >
+            Results
+          </Tab>
+        </TabsContainer>
+        
+        {activeTab === 'setup' && renderSetupTab()}
+        {activeTab === 'results' && renderResultsTab()}
+      </Content>
+    </PanelContainer>
   );
 };
 

@@ -2,7 +2,6 @@ import React from 'react';
 import { ToastContainer } from 'react-toastify';
 import { AppProvider } from '../contexts/AppContext';
 import 'react-toastify/dist/ReactToastify.css';
-import '../styles/highstock-styles.css';
 import '../styles/globals.css';
 
 function MyApp({ Component, pageProps }) {

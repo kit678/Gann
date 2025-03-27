@@ -33,7 +33,9 @@ const Navbar = () => {
             <>
               <FaSun className="sun-icon" />
               <div className="sun-details">
-                <span>{sunPosition.zodiac_sign} {sunPosition.degrees_in_sign.toFixed(2)}°</span>
+                <span>
+                  {sunPosition?.zodiac_sign || 'Loading...'} {sunPosition?.degrees_in_sign !== undefined ? sunPosition.degrees_in_sign.toFixed(2) : '0.00'}°
+                </span>
                 <span className="last-updated">Updated: {formatTime(lastUpdated)}</span>
               </div>
             </>
