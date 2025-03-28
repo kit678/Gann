@@ -10,12 +10,15 @@ const PanelContainer = styled.div`
   border: 1px solid #2a2e39;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   padding: 16px;
-  margin-top: 16px;
+  margin-top: 0;
   width: 100%;
   height: ${props => props.isCollapsed ? '50px' : '250px'};
-  transition: height 0.3s ease;
+  min-height: ${props => props.isCollapsed ? '50px' : '250px'};
+  max-height: ${props => props.isCollapsed ? '50px' : '250px'};
+  transition: height 0.3s ease, min-height 0.3s ease, max-height 0.3s ease;
   overflow: hidden;
   position: relative;
+  z-index: 2;
 `;
 
 const Header = styled.div`
@@ -207,7 +210,13 @@ const MetricValue = styled.div`
  * 
  * Provides controls for running a backtest and visualizing results.
  */
-const BacktestingPanel = ({ data, chartInstance, priceToBarRatio }) => {
+const BacktestingPanel = ({ 
+  data, 
+  chartInstance, 
+  priceToBarRatio, 
+  defaultCollapsed = false,
+  onCollapseChange = null
+}) => {
   const backtestEngineRef = useRef(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -241,7 +250,7 @@ const BacktestingPanel = ({ data, chartInstance, priceToBarRatio }) => {
       stopLoss: 2
     }
   });
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [activeTab, setActiveTab] = useState('setup');
   const [isBacktesting, setIsBacktesting] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState('normal');
@@ -718,7 +727,11 @@ const BacktestingPanel = ({ data, chartInstance, priceToBarRatio }) => {
   };
   
   const toggleCollapse = () => {
-    setIsCollapsed(!isCollapsed);
+    const newCollapsedState = !isCollapsed;
+    setIsCollapsed(newCollapsedState);
+    if (onCollapseChange) {
+      onCollapseChange(newCollapsedState);
+    }
   };
   
   const handleIndicatorToggle = (indicatorId) => {

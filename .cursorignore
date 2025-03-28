@@ -1,0 +1,45 @@
+# Node modules and build files
+node_modules/
+.next/
+dist/
+build/
+
+# Large third-party libraries that don't need context indexing
+public/charting_library/bundles/
+public/charting_library/static/
+public/datafeeds/
+
+# These files are TradingView library files - we want to keep the type definitions
+# but not all the implementation details
+src/charting_library/*
+!src/charting_library/*.d.ts
+!src/charting_library/datafeed-api.d.ts
+
+# Advanced charts - keep only TypeScript definitions and key files
+advanced_charts/charting_library/*
+!advanced_charts/charting_library/*.d.ts
+!advanced_charts/charting_library/README.md
+advanced_charts/datafeeds/*
+!advanced_charts/datafeeds/*.d.ts
+
+# Package lock files are too large for indexing
+package-lock.json
+yarn.lock
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Log files
+*.log
+logs/
+
+# Debug files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System files
+.DS_Store
+Thumbs.db

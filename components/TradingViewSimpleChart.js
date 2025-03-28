@@ -17,6 +17,9 @@ const ChartContainer = styled.div`
  * @param {Function} props.datafeedUrl - URL to the datafeed
  * @param {Object} props.customIndicators - Custom indicators to register
  * @param {boolean} props.debug - Enable debug mode
+ * @param {Function} props.onChartReady - Callback when chart is ready with widget instance
+ * @param {Function} props.onSymbolChange - Callback when symbol changes
+ * @param {Function} props.onIntervalChange - Callback when interval changes
  */
 const TradingViewSimpleChart = ({ 
   symbol = 'AAPL',
@@ -26,26 +29,118 @@ const TradingViewSimpleChart = ({
   datafeedUrl = 'https://demo_feed.tradingview.com',
   customIndicators = [],
   debug = false,
+  onChartReady = null,
+  onSymbolChange = null,
+  onIntervalChange = null,
 }, ref) => {
   const chartContainerRef = useRef(null);
   const tvWidgetRef = useRef(null);
   const [isChartReady, setIsChartReady] = useState(false);
+  
+  // Use refs to track current symbol and interval to prevent unnecessary re-renders
+  const currentSymbolRef = useRef(symbol);
+  const currentIntervalRef = useRef(interval);
+  const isInternalUpdateRef = useRef(false);
+  
+  // Create a stable version of callback refs to prevent recreation
+  const onChartReadyRef = useRef(onChartReady);
+  const onSymbolChangeRef = useRef(onSymbolChange);
+  const onIntervalChangeRef = useRef(onIntervalChange);
+  
+  // Update refs when props change
+  useEffect(() => {
+    onChartReadyRef.current = onChartReady;
+    onSymbolChangeRef.current = onSymbolChange;
+    onIntervalChangeRef.current = onIntervalChange;
+  }, [onChartReady, onSymbolChange, onIntervalChange]);
 
   // Initialize TradingView widget
   useEffect(() => {
     if (!chartContainerRef.current) return;
+    
+    // Skip re-initialization if we already have a widget and just symbol/interval changed
+    if (tvWidgetRef.current && isChartReady && (
+        symbol !== currentSymbolRef.current || 
+        interval !== currentIntervalRef.current)) {
+      
+      console.log('Updating existing widget with new symbol/interval', symbol, interval);
+      isInternalUpdateRef.current = true;
+      
+      try {
+        const chart = tvWidgetRef.current.chart();
+        
+        // Only update the symbol if it has changed
+        if (symbol !== currentSymbolRef.current) {
+          chart.setSymbol(symbol, () => {
+            currentSymbolRef.current = symbol;
+            console.log('Symbol updated to', symbol);
+            isInternalUpdateRef.current = false;
+          });
+        }
+        
+        // Only update the interval if it has changed
+        if (interval !== currentIntervalRef.current) {
+          chart.setResolution(interval, () => {
+            currentIntervalRef.current = interval;
+            console.log('Interval updated to', interval);
+            isInternalUpdateRef.current = false;
+          });
+        }
+      } catch (error) {
+        console.error('Error updating widget with new symbol/interval', error);
+        isInternalUpdateRef.current = false;
+      }
+      
+      // Return early since we're just updating the existing widget
+      return;
+    }
 
     // Check if TradingView library is loaded
     if (!window.TradingView) {
       console.error('TradingView library not loaded');
       return;
     }
+    
+    // Cleanup existing widget before creating a new one
+    if (tvWidgetRef.current) {
+      try {
+        tvWidgetRef.current.remove();
+        tvWidgetRef.current = null;
+      } catch (error) {
+        console.error('Error removing existing TradingView widget:', error);
+      }
+    }
 
     // Create widget
     const createWidget = async () => {
       try {
+        // Update our refs to the current values
+        currentSymbolRef.current = symbol;
+        currentIntervalRef.current = interval;
+        
         // Create datafeed
-        const datafeed = new window.Datafeeds.UDFCompatibleDatafeed(datafeedUrl);
+        const datafeed = new window.Datafeeds.UDFCompatibleDatafeed(datafeedUrl, {
+          debug: debug // Enable debug logging if debug mode is on
+        });
+        
+        // Ensure symbol info has a valid name by modifying the resolveSymbol method
+        const originalResolveSymbol = datafeed.resolveSymbol;
+        if (originalResolveSymbol) {
+          datafeed.resolveSymbol = function(symbolName, onResolve, onError, extension) {
+            if (debug) console.log('Resolving symbol:', symbolName);
+            return originalResolveSymbol.call(this, symbolName, (symbolInfo) => {
+              // Ensure the symbol has a valid name property
+              if (!symbolInfo.name || symbolInfo.name === '') {
+                symbolInfo.name = symbolName;
+              }
+              if (debug) console.log('Symbol resolved:', symbolInfo);
+              onResolve(symbolInfo);
+            }, (error) => {
+              console.error('Error resolving symbol:', error);
+              if (onError) onError(error);
+            }, extension);
+          };
+        }
 
         // Widget options
         const widgetOptions = {
@@ -56,29 +151,38 @@ const TradingViewSimpleChart = ({
           library_path: libraryPath,
           locale: 'en',
           disabled_features: [
-            'header_symbol_search',
-            'header_compare'
+            'use_localstorage_for_settings' // Disable local storage to prevent caching issues
           ],
           enabled_features: [
             'study_templates',
-            'use_localstorage_for_settings',
             'create_volume_indicator_by_default',
-            'bar_replay'
+            'bar_replay',
+            'header_symbol_search',
+            'header_interval_dialog_button',
+            'show_interval_dialog_on_key_press',
+            'header_chart_type',
+            'header_settings',
+            'header_indicators',
+            'header_compare',
+            'header_undo_redo',
+            'header_screenshot',
+            'timeframes_toolbar',
+            'header_saveload',
+            'header_fullscreen_button',
+            'constraint_dialogs_movement',
+            'display_market_status',
+            'remove_library_container_border'
           ],
-          charts_storage_url: 'https://saveload.tradingview.com',
-          charts_storage_api_version: '1.1',
-          client_id: 'tradingview.com',
-          user_id: 'public_user',
+          header_widget_buttons_mode: 'fullsize',
+          allow_symbol_change: true,
+          allow_timeframe_change: true,
           fullscreen: false,
           autosize: true,
           studies_overrides: {
-            "volume.volume.color.0": "rgba(255, 68, 68, 0.5)",
-            "volume.volume.color.1": "rgba(68, 170, 255, 0.5)",
-            "volume.volume.in_main_pane": false,
-            "volume.volume.up.color": "rgba(68, 170, 255, 0.5)",
-            "volume.volume.down.color": "rgba(255, 68, 68, 0.5)",
+            "volume.volume.color.0": "#ef5350",
+            "volume.volume.color.1": "#26a69a",
             "volume.volume.transparency": 50,
-            "volume.show.separate.pane": true
+            "volume.volume.visible": true
           },
           theme: 'Dark',
           loading_screen: { backgroundColor: "#131722" },
@@ -98,50 +202,53 @@ const TradingViewSimpleChart = ({
             "mainSeriesProperties.candleStyle.borderUpColor": "#26a69a",
             "mainSeriesProperties.candleStyle.borderDownColor": "#ef5350",
             "mainSeriesProperties.candleStyle.wickUpColor": "#26a69a",
-            "mainSeriesProperties.candleStyle.wickDownColor": "#ef5350",
-            "mainSeriesProperties.priceAxisProperties.autoScaleDisabled": false,
-            "mainSeriesProperties.priceAxisProperties.percentage": false,
-            "mainSeriesProperties.priceAxisProperties.log": false,
-            "mainSeriesProperties.barSpacing": 6,
-            "timeScale.rightOffset": 5,
-            "timeScale.barSpacing": 6
-          },
-          timeScale: {
-            rightOffset: 5,
-            barSpacing: 6,
-            fixLeftEdge: true,
-            lockVisibleTimeRangeOnResize: true,
-            rightBarStaysOnScroll: true,
-            borderVisible: false,
-            visible: true,
-            timeVisible: true,
-            secondsVisible: false
-          },
-          priceScale: {
-            autoScale: true,
-            mode: 0,
-            invertScale: false,
-            alignLabels: true,
-            borderVisible: true,
-            entireTextOnly: false,
-            visible: true
+            "mainSeriesProperties.candleStyle.wickDownColor": "#ef5350"
           }
         };
 
-        // Create TradingView widget
-        const tvWidget = new window.TradingView.widget(widgetOptions);
-        tvWidgetRef.current = tvWidget;
+        // Create widget instance
+        const widget = new window.TradingView.widget(widgetOptions);
 
-        // Save reference to widget and hook up ready callback
-        tvWidget.onChartReady(() => {
-          console.log('Chart has been initialized');
+        // Store widget reference
+        tvWidgetRef.current = widget;
+
+        // Set up widget event handlers
+        widget.onChartReady(() => {
+          if (debug) console.log('Chart is ready');
           setIsChartReady(true);
           
-          // Register custom indicators
-          registerCustomIndicators(tvWidget);
+          // Get chart instance
+          const chart = widget.chart();
           
-          // Initialize drawing tools capabilities
-          setupDrawingTools(tvWidget);
+          // Subscribe to symbol change events
+          chart.onSymbolChanged().subscribe(null, () => {
+            const newSymbol = chart.symbol();
+            if (debug) console.log('Symbol changed to:', newSymbol);
+            
+            if (!isInternalUpdateRef.current && newSymbol !== currentSymbolRef.current) {
+              currentSymbolRef.current = newSymbol;
+              if (onSymbolChangeRef.current) {
+                onSymbolChangeRef.current(newSymbol);
+              }
+            }
+          });
+          
+          // Subscribe to interval change events
+          chart.onIntervalChanged().subscribe(null, (newInterval) => {
+            if (debug) console.log('Interval changed to:', newInterval);
+            
+            if (!isInternalUpdateRef.current && newInterval !== currentIntervalRef.current) {
+              currentIntervalRef.current = newInterval;
+              if (onIntervalChangeRef.current) {
+                onIntervalChangeRef.current(newInterval);
+              }
+            }
+          });
+          
+          // Call onChartReady callback if provided
+          if (onChartReadyRef.current) {
+            onChartReadyRef.current(widget);
+          }
         });
       } catch (error) {
         console.error('Error initializing TradingView chart:', error);
@@ -161,7 +268,47 @@ const TradingViewSimpleChart = ({
         }
       }
     };
-  }, [symbol, interval, datafeedUrl, libraryPath, containerId]);
+    
+    // Only include dependencies that should trigger a complete rebuild of the chart
+    // Do NOT include symbol, interval, onChartReady, onSymbolChange, onIntervalChange
+  }, [datafeedUrl, libraryPath, containerId, debug]);
+
+  // Add volume indicator to the chart properly
+  const addVolumeIndicator = (widget) => {
+    if (!widget || !widget.chart()) return;
+    
+    try {
+      const chart = widget.chart();
+      
+      // First, remove any existing volume indicators that might be in the wrong place
+      chart.getAllStudies().forEach(study => {
+        if (study.name === 'Volume') {
+          chart.removeEntity(study.id);
+        }
+      });
+      
+      // Add volume indicator in a separate pane with proper configuration
+      chart.createStudy(
+        'Volume', 
+        false, 
+        false, 
+        {}, 
+        {
+          'color.0': '#ef5350',  // Down color
+          'color.1': '#26a69a',  // Up color
+          'transparency': 50,
+          'visible': true,
+          'in_main_pane': false  // Ensure it's not in the main pane
+        }
+      );
+      
+      if (debug) {
+        console.log('Volume indicator added in separate pane');
+      }
+    } catch (error) {
+      console.error('Error adding volume indicator:', error);
+    }
+  };
 
   // Register custom indicators with the TradingView widget
   const registerCustomIndicators = (widget) => {

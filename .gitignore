@@ -1,2 +1,47 @@
+# Dependencies
 node_modules/
-advanced_charts/
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Next.js
+/.next/
+/out/
+
+# Production
+/build
+/dist
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Local env files
+.env*.local
+.env
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Large TradingView library files (store these elsewhere or use CDN)
+# but keep the type definitions
+public/charting_library/bundles/
+public/charting_library/static/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo

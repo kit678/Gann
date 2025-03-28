@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Head from 'next/head';
 import dynamic from 'next/dynamic';
 import styled from 'styled-components';
-import Layout from '../components/Layout';
 import { availableIndicators } from '../utils/indicators';
 import BacktestingPanel from '../components/BacktestingPanel';
 import Script from 'next/script';
@@ -13,55 +12,34 @@ const TradingViewChart = dynamic(
   { ssr: false }
 );
 
+// Global styles to ensure proper rendering
+const GlobalStyle = styled.div`
+  body, html {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+`;
+
 const PageContainer = styled.div`
-  padding: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: #131722;
+  position: relative;
 `;
 
 const ChartWrapper = styled.div`
   width: 100%;
-  height: 600px;
-  margin-bottom: 2rem;
-  border-radius: 4px;
+  flex: 1;
   overflow: hidden;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-`;
-
-const ControlsContainer = styled.div`
-  display: flex;
-  gap: 15px;
-  margin-bottom: 20px;
-  align-items: center;
-  flex-wrap: wrap;
-`;
-
-const InputGroup = styled.div`
-  display: flex;
-  flex-direction: column;
-`;
-
-const Label = styled.label`
-  font-size: 14px;
-  margin-bottom: 5px;
-  color: #555;
-`;
-
-const Input = styled.input`
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
-  min-width: 120px;
-`;
-
-const Select = styled.select`
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
-  min-width: 150px;
-  background-color: white;
+  position: relative;
+  z-index: 1; /* Ensure chart tools are accessible */
 `;
 
 const ErrorMessage = styled.div`
@@ -72,16 +50,29 @@ const ErrorMessage = styled.div`
   background-color: #fed7d7;
 `;
 
+// Custom styled backtesting panel wrapper to control its size independently
+const BacktestingContainer = styled.div`
+  width: 100%;
+  min-height: ${props => props.isCollapsed ? '50px' : '250px'};
+  max-height: ${props => props.isCollapsed ? '50px' : '250px'};
+  transition: min-height 0.3s ease, max-height 0.3s ease;
+`;
+
 /**
  * Advanced TradingView chart page with custom geometric indicators and backtesting
  */
 const TradingViewAdvancedPage = () => {
+  // Use state for things that should trigger re-renders
   const [symbol, setSymbol] = useState('AAPL');
   const [interval, setInterval] = useState('D');
-  const [tvWidget, setTvWidget] = useState(null);
   const [error, setError] = useState(null);
   const [activeIndicators, setActiveIndicators] = useState({});
+  const [isBacktestingCollapsed, setIsBacktestingCollapsed] = useState(true);
+  
+  // Use refs for things that shouldn't trigger re-renders
   const tvWidgetRef = useRef(null);
+  const chartRef = useRef(null);
+  const isUpdatingRef = useRef(false);
   
   // Reference to library path
   const libraryPath = '/charting_library/';
@@ -89,75 +80,82 @@ const TradingViewAdvancedPage = () => {
   // Default datafeed URL - use our own UDF-compatible API
   const datafeedUrl = '/api/tradingview';
   
-  // Handle symbol change
-  const handleSymbolChange = (e) => {
-    setSymbol(e.target.value);
-  };
+  // Handle symbol change from chart or external UI
+  const handleSymbolChange = useCallback((newSymbol) => {
+    console.log('Parent: Symbol changed to', newSymbol);
+    
+    // Prevent unnecessary updates
+    if (newSymbol && newSymbol !== symbol && !isUpdatingRef.current) {
+      isUpdatingRef.current = true;
+      setSymbol(newSymbol);
+      
+      // Reset the flag after the state update
+      setTimeout(() => {
+        isUpdatingRef.current = false;
+      }, 50);
+    }
+  }, [symbol]);
   
-  // Handle interval change
-  const handleIntervalChange = (e) => {
-    setInterval(e.target.value);
-  };
+  // Handle interval change from chart or external UI
+  const handleIntervalChange = useCallback((newInterval) => {
+    console.log('Parent: Interval changed to', newInterval);
+    
+    // Prevent unnecessary updates
+    if (newInterval && newInterval !== interval && !isUpdatingRef.current) {
+      isUpdatingRef.current = true;
+      setInterval(newInterval);
+      
+      // Reset the flag after the state update
+      setTimeout(() => {
+        isUpdatingRef.current = false;
+      }, 50);
+    }
+  }, [interval]);
   
   // Get reference to widget instance when it's ready
-  const onChartReady = (widgetInstance) => {
+  const onChartReady = useCallback((widgetInstance) => {
+    console.log('Chart widget instance ready');
     tvWidgetRef.current = widgetInstance;
-    setTvWidget(widgetInstance);
-  };
+    
+    // No need to update state here - just use the ref
+  }, []);
   
   // Toggle an indicator on/off
-  const handleIndicatorToggle = (indicatorId, isEnabled) => {
+  const handleIndicatorToggle = useCallback((indicatorId, isEnabled) => {
     setActiveIndicators(prev => ({
       ...prev,
       [indicatorId]: isEnabled
     }));
-  };
+  }, []);
 
-  // Reference to the chart component
-  const chartRef = useRef(null);
+  // Handle backtesting panel collapse toggle
+  const handleBacktestingCollapse = useCallback((isCollapsed) => {
+    setIsBacktestingCollapsed(isCollapsed);
+  }, []);
 
   return (
-    <Layout>
+    <>
       <Head>
-        <title>Advanced TradingView Chart with Custom Indicators | GannSq9</title>
+        <title>Advanced TradingView Chart | GannSq9</title>
         <meta name="description" content="Advanced TradingView chart with custom geometric indicators and backtesting capabilities" />
         <link rel="icon" href="/favicon.ico" />
+        <style>{`
+          body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+          }
+          * {
+            box-sizing: border-box;
+          }
+        `}</style>
       </Head>
       <Script src={`${libraryPath}charting_library.js`} strategy="beforeInteractive" />
       <Script src={`/datafeeds/udf/dist/bundle.js`} strategy="beforeInteractive" />
       
       <PageContainer>
-        <ControlsContainer>
-          <InputGroup>
-            <Label htmlFor="symbol">Symbol</Label>
-            <Input 
-              id="symbol" 
-              type="text" 
-              value={symbol} 
-              onChange={handleSymbolChange} 
-              placeholder="Enter symbol" 
-            />
-          </InputGroup>
-          
-          <InputGroup>
-            <Label htmlFor="interval">Interval</Label>
-            <Select 
-              id="interval" 
-              value={interval} 
-              onChange={handleIntervalChange}
-            >
-              <option value="1">1 Minute</option>
-              <option value="5">5 Minutes</option>
-              <option value="15">15 Minutes</option>
-              <option value="30">30 Minutes</option>
-              <option value="60">1 Hour</option>
-              <option value="D">1 Day</option>
-              <option value="W">1 Week</option>
-              <option value="M">1 Month</option>
-            </Select>
-          </InputGroup>
-        </ControlsContainer>
-        
         {error && (
           <ErrorMessage>
             {error}
@@ -173,16 +171,23 @@ const TradingViewAdvancedPage = () => {
             datafeedUrl={datafeedUrl}
             customIndicators={availableIndicators}
             debug={true}
+            onChartReady={onChartReady}
+            onSymbolChange={handleSymbolChange}
+            onIntervalChange={handleIntervalChange}
           />
         </ChartWrapper>
         
-        <BacktestingPanel 
-          tvWidget={tvWidgetRef.current}
-          customIndicators={availableIndicators}
-          onIndicatorToggle={handleIndicatorToggle}
-        />
+        <BacktestingContainer isCollapsed={isBacktestingCollapsed}>
+          <BacktestingPanel 
+            tvWidget={tvWidgetRef.current}
+            customIndicators={availableIndicators}
+            onIndicatorToggle={handleIndicatorToggle}
+            defaultCollapsed={true}
+            onCollapseChange={handleBacktestingCollapse}
+          />
+        </BacktestingContainer>
       </PageContainer>
-    </Layout>
+    </>
   );
 };
 
