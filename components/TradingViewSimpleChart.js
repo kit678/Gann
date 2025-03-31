@@ -142,6 +142,10 @@ const TradingViewSimpleChart = ({
           };
         }
 
+        // Define client and user IDs to prevent undefined values
+        const clientId = 'gannsq9_client';
+        const userId = 'gannsq9_user';
+
         // Widget options
         const widgetOptions = {
           symbol: symbol,
@@ -151,10 +155,10 @@ const TradingViewSimpleChart = ({
           library_path: libraryPath,
           locale: 'en',
           disabled_features: [
-            'use_localstorage_for_settings' // Disable local storage to prevent caching issues
+            'use_localstorage_for_settings', // Disable local storage to prevent caching issues
+            'study_templates' // Disable study templates to prevent 404 errors
           ],
           enabled_features: [
-            'study_templates',
             'create_volume_indicator_by_default',
             'bar_replay',
             'header_symbol_search',
@@ -173,16 +177,18 @@ const TradingViewSimpleChart = ({
             'display_market_status',
             'remove_library_container_border'
           ],
+          client_id: clientId,
+          user_id: userId,
+          charts_storage_url: null, // Setting to null explicitly for local-only operation
+          charts_storage_api_version: '1.1', // Add required version even if not used
+          auto_save_delay: 10, // Standard setting for auto-save
           header_widget_buttons_mode: 'fullsize',
           allow_symbol_change: true,
           allow_timeframe_change: true,
           fullscreen: false,
           autosize: true,
           studies_overrides: {
-            "volume.volume.color.0": "#ef5350",
-            "volume.volume.color.1": "#26a69a",
-            "volume.volume.transparency": 50,
-            "volume.volume.visible": true
+            // Remove all volume-related overrides - they'll be handled by the addVolumeIndicator function
           },
           theme: 'Dark',
           loading_screen: { backgroundColor: "#131722" },
@@ -203,6 +209,24 @@ const TradingViewSimpleChart = ({
             "mainSeriesProperties.candleStyle.borderDownColor": "#ef5350",
             "mainSeriesProperties.candleStyle.wickUpColor": "#26a69a",
             "mainSeriesProperties.candleStyle.wickDownColor": "#ef5350"
+          },
+          // Simplified saved_data_meta_info to avoid schema issues
+          saved_data_meta_info: {
+            id: userId
+          },
+          // More standardized save_load_adapter
+          save_load_adapter: {
+            supportedChartStyles: undefined,
+            supportedWatchlists: undefined,
+            supportedStudyTemplates: undefined,
+            getAllCharts: () => Promise.resolve([]),
+            removeChart: () => Promise.resolve(),
+            saveChart: () => Promise.resolve(),
+            getChartContent: () => Promise.resolve(null),
+            getAllStudyTemplates: () => Promise.resolve([]),
+            removeStudyTemplate: () => Promise.resolve(),
+            saveStudyTemplate: () => Promise.resolve(),
+            getStudyTemplateContent: () => Promise.resolve(null)
           }
         };
 
@@ -219,6 +243,9 @@ const TradingViewSimpleChart = ({
           
           // Get chart instance
           const chart = widget.chart();
+          
+          // Add volume indicator properly instead of relying on studies_overrides
+          addVolumeIndicator(widget);
           
           // Subscribe to symbol change events
           chart.onSymbolChanged().subscribe(null, () => {
@@ -280,30 +307,26 @@ const TradingViewSimpleChart = ({
     try {
       const chart = widget.chart();
       
-      // First, remove any existing volume indicators that might be in the wrong place
+      // First, remove any existing volume indicators
       chart.getAllStudies().forEach(study => {
         if (study.name === 'Volume') {
           chart.removeEntity(study.id);
         }
       });
       
-      // Add volume indicator in a separate pane with proper configuration
-      chart.createStudy(
+      // Create volume indicator with minimal properties
+      // Note: Don't specify color, transparency or in_main_pane directly
+      const volumeStudyId = chart.createStudy(
         'Volume', 
         false, 
-        false, 
-        {}, 
-        {
-          'color.0': '#ef5350',  // Down color
-          'color.1': '#26a69a',  // Up color
-          'transparency': 50,
-          'visible': true,
-          'in_main_pane': false  // Ensure it's not in the main pane
-        }
+        false
       );
       
+      // TradingView 29.1.0 uses a different approach to set volume indicator properties
+      // Let the chart handle the default properties instead of trying to override them
+      
       if (debug) {
-        console.log('Volume indicator added in separate pane');
+        console.log('Volume indicator added with ID:', volumeStudyId);
       }
     } catch (error) {
       console.error('Error adding volume indicator:', error);

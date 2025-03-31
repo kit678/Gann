@@ -2,12 +2,12 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/api/tradingview/history": "pages/api/tradingview/history.js",
   "/tradingview-advanced": "pages/tradingview-advanced.js",
   "/api/yahoo-finance": "pages/api/yahoo-finance.js",
+  "/api/tradingview/history": "pages/api/tradingview/history.js",
   "/api/tradingview/config": "pages/api/tradingview/config.js",
-  "/api/tradingview/symbols": "pages/api/tradingview/symbols.js",
   "/api/tradingview/time": "pages/api/tradingview/time.js",
+  "/api/tradingview/symbols": "pages/api/tradingview/symbols.js",
   "/api/tradingview/marks": "pages/api/tradingview/marks.js",
   "/api/tradingview/timescale_marks": "pages/api/tradingview/timescale_marks.js"
 }

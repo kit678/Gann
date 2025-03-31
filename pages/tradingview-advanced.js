@@ -133,6 +133,24 @@ const TradingViewAdvancedPage = () => {
     setIsBacktestingCollapsed(isCollapsed);
   }, []);
 
+  // Handle potential errors from the chart loading
+  useEffect(() => {
+    // Create error event handler
+    const handleError = (event) => {
+      if (event.message && event.message.includes('TradingView')) {
+        setError(`Chart error: ${event.message}`);
+      }
+    };
+
+    // Add global error listener
+    window.addEventListener('error', handleError);
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('error', handleError);
+    };
+  }, []);
+
   return (
     <>
       <Head>
@@ -152,7 +170,8 @@ const TradingViewAdvancedPage = () => {
           }
         `}</style>
       </Head>
-      <Script src={`${libraryPath}charting_library.js`} strategy="beforeInteractive" />
+      {/* Properly load scripts with correct paths */}
+      <Script src={`${libraryPath}charting_library.standalone.js`} strategy="beforeInteractive" />
       <Script src={`/datafeeds/udf/dist/bundle.js`} strategy="beforeInteractive" />
       
       <PageContainer>
