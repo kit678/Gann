@@ -1,0 +1,32 @@
+/* Custom TradingView Chart Styles */
+
+/* Make chart responsive */
+#tv_chart_container {
+  height: 100%;
+  width: 100%;
+}
+
+/* Customize toolbar buttons */
+.chart-page .group .button.selected {
+  background-color: rgba(45, 115, 220, 0.2) !important;
+}
+
+/* Improve visibility of text */
+.chart-markup-table.pane {
+  color: #ddd !important;
+}
+
+/* Fix for drawing tools */
+.tv-linetool-properties-toolbar__button.i-active {
+  background-color: rgba(45, 115, 220, 0.2) !important;
+}
+
+/* Fix for popups */
+.tv-dialog {
+  background-color: #1e222d !important;
+}
+
+/* Fix dragging elements */
+.ui-draggable-dragging {
+  opacity: 0.8 !important;
+} 

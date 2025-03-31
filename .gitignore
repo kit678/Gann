@@ -37,8 +37,7 @@ next-env.d.ts
 
 # Large TradingView library files (store these elsewhere or use CDN)
 # but keep the type definitions
-public/charting_library/bundles/
-public/charting_library/static/
+
 
 # IDE files
 .idea/
