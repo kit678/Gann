@@ -1,12 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import GannSquareChart from '../components/GannSquareChart';
 
 const GannChartTest = () => {
+  const [inputNumber, setInputNumber] = useState(81);
+  const [multiplyBy10, setMultiplyBy10] = useState(false);
   const [targetNumber, setTargetNumber] = useState(81);
   const [maxRings, setMaxRings] = useState(4);
   const [cellSize, setCellSize] = useState(40);
   const [highlightSpokes, setHighlightSpokes] = useState(true);
+
+  // Calculate the target number based on input number and multiplier checkbox
+  useEffect(() => {
+    // Apply modulus operation if > 360
+    const modulusResult = inputNumber > 360 ? inputNumber % 360 : inputNumber;
+    
+    // Apply multiplication if checkbox is selected
+    const finalTarget = multiplyBy10 ? modulusResult * 10 : modulusResult;
+    
+    setTargetNumber(finalTarget);
+    
+    // Auto-adjust max rings based on target number
+    const requiredRings = Math.ceil(Math.sqrt(finalTarget) / 2);
+    setMaxRings(Math.max(requiredRings, 1));
+  }, [inputNumber, multiplyBy10]);
 
   return (
     <Layout title="Gann Chart Test">
@@ -15,13 +32,29 @@ const GannChartTest = () => {
         
         <div className="controls">
           <div className="form-group">
-            <label>Target Number:</label>
+            <label>Input Number:</label>
             <input 
               type="number" 
-              value={targetNumber} 
-              onChange={(e) => setTargetNumber(parseInt(e.target.value) || 1)} 
+              value={inputNumber} 
+              onChange={(e) => setInputNumber(parseInt(e.target.value) || 1)} 
               min="1" 
             />
+          </div>
+          
+          <div className="form-group">
+            <label>
+              <input 
+                type="checkbox" 
+                checked={multiplyBy10} 
+                onChange={(e) => setMultiplyBy10(e.target.checked)} 
+              />
+              Multiply by 10
+            </label>
+          </div>
+          
+          <div className="form-group target-display">
+            <label>Target Number:</label>
+            <span className="target-value">{targetNumber}</span>
           </div>
           
           <div className="form-group">
@@ -84,6 +117,18 @@ const GannChartTest = () => {
             display: flex;
             align-items: center;
             gap: 10px;
+          }
+          .target-display {
+            border-left: 1px solid #ccc;
+            padding-left: 15px;
+            font-weight: bold;
+          }
+          .target-value {
+            background: #e0e0e0;
+            padding: 4px 10px;
+            border-radius: 4px;
+            min-width: 50px;
+            text-align: center;
           }
           .chart-container {
             margin-top: 20px;

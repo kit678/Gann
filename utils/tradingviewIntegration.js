@@ -94,4 +94,22 @@ export function setupTradingViewCustomIndicators(tvWidget, customIndicators = []
   } catch (error) {
     console.error('Error setting up custom indicators:', error);
   }
+}
+
+// Instead, add a utility function to add custom indicators to a widget
+export function addCustomIndicatorsToWidget(tvWidget) {
+  if (!tvWidget) return;
+  
+  try {
+    // Create a filtered list of valid indicators
+    const validIndicators = availableIndicators
+      .filter(indicator => indicator.tvIndicator);
+      
+    // Make all indicators available via widget reference for direct access
+    tvWidget.customIndicators = validIndicators;
+    
+    console.log(`Added ${validIndicators.length} custom indicators to widget reference`);
+  } catch (error) {
+    console.error('Error adding custom indicators to widget:', error);
+  }
 } 

@@ -1,9 +1,21 @@
 /**
- * Custom indicators framework for TradingView Charting Library
+ * Custom indicators framework for TradingView Charting Library v25+
  * 
  * This file provides utilities and base classes for creating custom geometric/visual
  * indicators that can be registered with the TradingView chart.
  */
+
+// Move the INDICATOR_TYPES constant to the top of the file
+export const INDICATOR_TYPES = {
+  SIMPLE_LINE: 'simple_line',
+  PIVOT_POINTS: 'pivot_points',
+  MA: 'ma',
+  EMA: 'ema',
+  BOLLINGER: 'bollinger',
+  RSI: 'rsi',
+  MACD: 'macd',
+  // other indicator types...
+};
 
 /**
  * Calculate the angle between two points in degrees
@@ -37,50 +49,30 @@ export class CustomIndicator {
     this._instances = [];
   }
 
-  /**
-   * Register the indicator with the TradingView chart
-   * @param {Object} chart - TradingView chart instance
-   * @param {Object} widget - TradingView widget instance
-   */
   register(chart, widget) {
-    // To be implemented by subclasses
     console.log(`Base register method called for ${this.name}`);
   }
 
-  /**
-   * Add the indicator to the chart
-   * @param {Object} chart - TradingView chart instance
-   * @param {Object} widget - TradingView widget instance
-   */
   add(chart, widget) {
     this.isActive = true;
-    // To be implemented by subclasses
   }
 
-  /**
-   * Remove the indicator from the chart
-   * @param {Object} chart - TradingView chart instance
-   * @param {Object} widget - TradingView widget instance
-   */
-  remove(chart, widget) {
+  remove(chart) {
     this.isActive = false;
-    // Remove all instances
+    this._clearInstances(chart);
+  }
+
+  _trackInstance(instance) {
+    this._instances.push(instance);
+  }
+
+  _clearInstances(chart) {
     this._instances.forEach(instance => {
       if (instance && typeof instance.remove === 'function') {
         instance.remove();
       }
     });
     this._instances = [];
-  }
-
-  /**
-   * Track an instance of this indicator
-   * @param {Object} instance - Indicator instance to track
-   */
-  _trackInstance(instance) {
-    if (instance) {
-      this._instances.push(instance);
-    }
   }
 }
 
@@ -527,9 +519,223 @@ export class FibonacciRetracement extends CustomIndicator {
   }
 }
 
-// Export a collection of all available indicators
+/**
+ * Pivot Points Indicator
+ * Identifies and marks pivot high and low points on the chart
+ */
+export class PivotPointsIndicator extends CustomIndicator {
+  constructor() {
+    super(
+      'pivot_points',
+      'Pivots High/Low',
+      'Identifies and marks swing highs and lows in price action'
+    );
+    
+    // Default settings
+    this.settings = {
+      lookbackBars: 5,
+      highColor: '#F44336',
+      lowColor: '#4CAF50'
+    };
+    
+    // The TV-compatible indicator definition
+    this.tvIndicator = {
+      name: "Pivots High/Low",
+      metainfo: {
+        _metainfoVersion: 51,
+        id: "PivotPoints@tv-basicstudies-1",
+        name: "Pivots High/Low",
+        description: "Pivots High/Low",
+        shortDescription: "Pivots",
+        is_price_study: true,
+        isCustomIndicator: true,
+        
+        // Important: Set this to true to make it show as an overlay
+        overlay: true,
+        
+        // Add format specification - this is required
+        format: {
+          type: "price",
+          precision: 2
+        },
+        
+        // Plot definitions
+        plots: [
+          {
+            id: "pivot_high",
+            type: "shapes"
+          },
+          {
+            id: "pivot_low", 
+            type: "shapes"
+          }
+        ],
+        
+        // Define styles with proper price format
+        styles: {
+          pivot_high: { 
+            title: "Pivot High", 
+            color: "#F44336",
+            plottype: 8, // Shape plot type
+            location: "AboveBar",
+            // Add price format
+            priceFormat: {
+              type: "price",
+              precision: 2
+            }
+          },
+          pivot_low: { 
+            title: "Pivot Low", 
+            color: "#4CAF50",
+            plottype: 8, // Shape plot type
+            location: "BelowBar",
+            // Add price format
+            priceFormat: {
+              type: "price",
+              precision: 2
+            }
+          }
+        },
+        
+        // Input parameters
+        inputs: [
+          {
+            id: "lookback",
+            name: "Lookback Bars",
+            defval: 5,
+            type: "integer",
+            min: 1,
+            max: 50
+          }
+        ]
+      },
+      
+      // The constructor is the implementation of the indicator
+      constructor: function() {
+        this.init = function(context, inputCallback) {
+          this._context = context;
+          this._input = inputCallback;
+          
+          // Define the main series
+          var lookback = this._input("lookback");
+          
+          // Define plot mapping to outputs
+          this._context.new_var("high_pivot", false);
+          this._context.new_var("low_pivot", false);
+        };
+        
+        this.main = function(context, inputCallback) {
+          this._context = context;
+          this._input = inputCallback;
+          
+          var lookback = this._input("lookback");
+          
+          // Get data
+          var high = this._context.high;
+          var low = this._context.low;
+          
+          // Check for pivot high
+          var isPivotHigh = this._context.Highest(high, lookback*2+1, lookback) == high[lookback];
+          
+          // Check for pivot low
+          var isPivotLow = this._context.Lowest(low, lookback*2+1, lookback) == low[lookback];
+          
+          // Return results
+          return [isPivotHigh ? 1 : NaN, isPivotLow ? 1 : NaN];
+        };
+      }
+    };
+  }
+  
+  // Add method to register the indicator with TradingView
+  register(chart, widget) {
+    console.log('Registering Pivot Points indicator');
+    // This will be handled by the custom_indicators_getter in tradingviewIntegration.js
+  }
+}
+
+// Move the BaseIndicator class definition before PivotPointsIndicator
+export class BaseIndicator {
+  constructor(id, name, config = {}) {
+    this.id = id;
+    this.name = name;
+    this._instances = [];
+  }
+
+  add(chart, widget) {
+    // Base add method
+    if (!chart || !widget) {
+      console.error('Chart or widget not available');
+      return;
+    }
+  }
+
+  _trackInstance(instance) {
+    this._instances.push(instance);
+  }
+
+  remove() {
+    // Remove all instances of this indicator
+    this._instances.forEach(instance => {
+      if (instance && typeof instance.remove === 'function') {
+        try {
+          instance.remove();
+        } catch (e) {
+          console.error(`Error removing instance of ${this.name}:`, e);
+        }
+      }
+    });
+    this._instances = [];
+  }
+}
+
+// Move the SimpleLineIndicator class definition before the availableIndicators array
+export class SimpleLineIndicator extends BaseIndicator {
+  constructor(type = INDICATOR_TYPES.SIMPLE_LINE, config = {}) {
+    super(type, 'Simple Line', config);
+    this.settings = {
+      offset: config.offset || 0,
+      color: config.color || '#FF0000'
+    };
+  }
+
+  add(chart, widget) {
+    super.add(chart, widget);
+    
+    try {
+      console.log('Adding Simple Line indicator...');
+      
+      widget.chart().createStudy(
+        "Simple Line",     // Must match the name in custom_indicators_getter
+        true,              // Set to true to force overlay on the chart
+        true,              // Make visible
+        { offset: this.settings.offset || 0 }, // Inputs
+        null,              // No callback
+        { "plot_0.color": this.settings.color } // Customization
+      ).then(studyId => {
+        console.log(`Added ${this.name} with ID: ${studyId}`);
+        this._trackInstance({ 
+          type: 'study', 
+          id: studyId, 
+          remove: () => widget.chart().removeStudy(studyId)
+        });
+      }).catch(err => {
+        console.error(`Error adding ${this.name}:`, err);
+      });
+    } catch (error) {
+      console.error(`Failed to add ${this.name}:`, error);
+    }
+  }
+}
+
+// Then keep the availableIndicators array after all class definitions
 export const availableIndicators = [
-  new GeometricTrendLine(),
-  new GannAngleIndicator(),
-  new FibonacciRetracement()
+  new PivotPointsIndicator()
 ];
+
+// Experimental indicators - not registered with the chart
+// export const experimentalIndicators = [
+//   new GeometricTrendLine(),
+//   new GannAngleIndicator(),
+//   new FibonacciRetracement()
+// ];

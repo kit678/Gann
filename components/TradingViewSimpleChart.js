@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import styled from 'styled-components';
+import { availableIndicators } from '../utils/indicators';
+import { configureWidgetWithCustomIndicators, addCustomIndicatorsToWidget } from '../utils/tradingviewIntegration';
 
 const ChartContainer = styled.div`
   height: 100%;
@@ -118,11 +120,42 @@ const TradingViewSimpleChart = ({
         currentSymbolRef.current = symbol;
         currentIntervalRef.current = interval;
         
-        // Create datafeed
+        // Create datafeed with complete real-time disabling
         const datafeed = new window.Datafeeds.UDFCompatibleDatafeed(datafeedUrl, {
-          debug: debug // Enable debug logging if debug mode is on
+          debug: debug,
+          enableUpdate: false,
+          updateFrequency: 99999999
         });
         
+        // Create a non-updating datafeed wrapper that blocks all update attempts
+        const staticDatafeed = {
+          // Pass through all required methods
+          onReady: (callback) => datafeed.onReady(callback),
+          resolveSymbol: (symbolName, onResolve, onError, extension) => 
+            datafeed.resolveSymbol(symbolName, onResolve, onError, extension),
+          getBars: (symbolInfo, resolution, from, to, onResult, onError, isFirstRequest) => 
+            datafeed.getBars(symbolInfo, resolution, from, to, onResult, onError, isFirstRequest),
+          subscribeBars: (symbolInfo, resolution, onTick, listenerGuid, onResetCacheNeededCallback) => {
+            // Save the subscription info but don't actually subscribe
+            console.log('Subscription request intercepted and blocked:', symbolInfo.name);
+            return listenerGuid; // Return the GUID without subscribing
+          },
+          unsubscribeBars: () => {}, // Do nothing on unsubscribe
+          getMarks: datafeed.getMarks ? 
+            (symbolInfo, from, to, onDataCallback, resolution) => 
+              datafeed.getMarks(symbolInfo, from, to, onDataCallback, resolution) : undefined,
+          getTimescaleMarks: datafeed.getTimescaleMarks ? 
+            (symbolInfo, from, to, onDataCallback, resolution) => 
+              datafeed.getTimescaleMarks(symbolInfo, from, to, onDataCallback, resolution) : undefined,
+          getServerTime: datafeed.getServerTime ? 
+            (callback) => datafeed.getServerTime(callback) : undefined,
+          // Most importantly - completely disable the subscription manager
+          getSubscriptionManager: () => ({
+            subscribeBars: () => "no-op",
+            unsubscribeBars: () => {}
+          })
+        };
+
         // Ensure symbol info has a valid name by modifying the resolveSymbol method
         const originalResolveSymbol = datafeed.resolveSymbol;
         if (originalResolveSymbol) {
@@ -149,25 +182,37 @@ const TradingViewSimpleChart = ({
         // Widget options
         const widgetOptions = {
           symbol: symbol,
-          datafeed: datafeed,
+          datafeed: staticDatafeed,
           interval: interval,
           container: chartContainerRef.current,
           library_path: libraryPath,
           locale: 'en',
           disabled_features: [
-            'use_localstorage_for_settings', // Disable local storage to prevent caching issues
-            'study_templates' // Disable study templates to prevent 404 errors
+            'use_localstorage_for_settings',
+            'study_templates',
+            'header_symbol_search',
+            'symbol_search_hot_key',
+            'header_compare',
+            'create_volume_indicator_by_default',
+            'streaming_real_time_update',
+            'end_of_period_timescale_marks',
+            'update_chart_series_on_symbol_changed',
+            'realtimeUpdate',
+            'update_timeframes_when_changed',
+            'auto_update_bars',
+            'real_time_subscription',
+            'cqg_real_time',
+            'realtime_rest',
+            'auto_update_source_from_features',
+            'show_realtime_bars'
           ],
           enabled_features: [
-            'create_volume_indicator_by_default',
             'bar_replay',
-            'header_symbol_search',
             'header_interval_dialog_button',
             'show_interval_dialog_on_key_press',
             'header_chart_type',
             'header_settings',
             'header_indicators',
-            'header_compare',
             'header_undo_redo',
             'header_screenshot',
             'timeframes_toolbar',
@@ -177,6 +222,7 @@ const TradingViewSimpleChart = ({
             'display_market_status',
             'remove_library_container_border'
           ],
+          auto_update: false,
           client_id: clientId,
           user_id: userId,
           charts_storage_url: null, // Setting to null explicitly for local-only operation
@@ -210,11 +256,9 @@ const TradingViewSimpleChart = ({
             "mainSeriesProperties.candleStyle.wickUpColor": "#26a69a",
             "mainSeriesProperties.candleStyle.wickDownColor": "#ef5350"
           },
-          // Simplified saved_data_meta_info to avoid schema issues
           saved_data_meta_info: {
             id: userId
           },
-          // More standardized save_load_adapter
           save_load_adapter: {
             supportedChartStyles: undefined,
             supportedWatchlists: undefined,
@@ -227,52 +271,104 @@ const TradingViewSimpleChart = ({
             removeStudyTemplate: () => Promise.resolve(),
             saveStudyTemplate: () => Promise.resolve(),
             getStudyTemplateContent: () => Promise.resolve(null)
-          }
+          },
+          custom_indicators_getter: function(PineJS) {
+            return Promise.resolve([
+              {
+                name: "Simple Line",
+                metainfo: {
+                  _metainfoVersion: 51,
+                  id: "SimpleLine@tv-basicstudies-1",
+                  name: "Simple Line",
+                  description: "Simple Line",
+                  shortDescription: "Simple Line",
+                  
+                  isCustomIndicator: true,
+                  overlay: true,
+                  
+                  format: {
+                    type: "price",
+                    precision: 2
+                  },
+                  
+                  plots: [
+                    { id: "plot_0", type: "line" }
+                  ],
+                  
+                  defaults: {
+                    styles: {
+                      plot_0: {
+                        linestyle: 0,
+                        visible: true,
+                        linewidth: 2,
+                        plottype: 0,
+                        color: "#FF0000"
+                      }
+                    },
+                    inputs: {
+                      offset: 0
+                    }
+                  },
+                  
+                  inputs: [
+                    { id: "offset", name: "Offset", type: "integer", defval: 0 }
+                  ]
+                },
+                
+                constructor: function() {
+                  this.init = function(context, inputCallback) {
+                    this._context = context;
+                    this._input = inputCallback;
+                    this._std = PineJS.Std;
+                  };
+                  
+                  this.main = function(context, inputCallback) {
+                    this._context = context;
+                    this._input = inputCallback;
+                    
+                    var offset = this._input("offset") || 0;
+                    
+                    // Always return a numerical value
+                    var price = this._std.close(this._context);
+                    if (typeof price !== 'number') price = 0;
+                    
+                    return [price + offset];
+                  };
+                }
+              }
+            ]);
+          },
+          supports_timescale_update: false,
+          supports_time: false
         };
 
-        // Create widget instance
-        const widget = new window.TradingView.widget(widgetOptions);
+        // Use our utility function to configure the widget with custom indicators
+        const configuredOptions = configureWidgetWithCustomIndicators(widgetOptions);
+        
+        // Create the widget with configured options
+        const widget = new window.TradingView.widget(configuredOptions);
 
         // Store widget reference
         tvWidgetRef.current = widget;
 
         // Set up widget event handlers
         widget.onChartReady(() => {
-          if (debug) console.log('Chart is ready');
+          console.log("Chart is ready");
           setIsChartReady(true);
           
-          // Get chart instance
-          const chart = widget.chart();
+          // Register custom indicators with the widget
+          addCustomIndicatorsToWidget(widget);
           
-          // Add volume indicator properly instead of relying on studies_overrides
-          addVolumeIndicator(widget);
-          
-          // Subscribe to symbol change events
-          chart.onSymbolChanged().subscribe(null, () => {
-            const newSymbol = chart.symbol();
-            if (debug) console.log('Symbol changed to:', newSymbol);
-            
-            if (!isInternalUpdateRef.current && newSymbol !== currentSymbolRef.current) {
-              currentSymbolRef.current = newSymbol;
-              if (onSymbolChangeRef.current) {
-                onSymbolChangeRef.current(newSymbol);
-              }
+          // Set proper overrides to enforce overlay behavior
+          widget.applyOverrides({
+            "studies_overrides": {
+              "PivotPoints@tv-basicstudies-1.plots.base_line.visible": false,
+              "PivotPoints@tv-basicstudies-1.plots.pivot_high.color": "#F44336",
+              "PivotPoints@tv-basicstudies-1.plots.pivot_low.color": "#4CAF50"
             }
           });
           
-          // Subscribe to interval change events
-          chart.onIntervalChanged().subscribe(null, (newInterval) => {
-            if (debug) console.log('Interval changed to:', newInterval);
-            
-            if (!isInternalUpdateRef.current && newInterval !== currentIntervalRef.current) {
-              currentIntervalRef.current = newInterval;
-              if (onIntervalChangeRef.current) {
-                onIntervalChangeRef.current(newInterval);
-              }
-            }
-          });
-          
-          // Call onChartReady callback if provided
+          // Notify ready callback
           if (onChartReadyRef.current) {
             onChartReadyRef.current(widget);
           }
@@ -341,7 +437,7 @@ const TradingViewSimpleChart = ({
       const chart = widget.chart();
       
       // Register custom indicators with the chart
-      customIndicators.forEach(indicator => {
+      availableIndicators.forEach(indicator => {
         if (typeof indicator.register === 'function') {
           indicator.register(chart, widget);
         }

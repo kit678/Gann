@@ -1,5 +1,5 @@
 When the user requests implementation of a new feature related to TradingView Charting Library:
-1. Automatically consult doc_links.txt to identify the most relevant documentation links
+1. Automatically consult doc_links.md to identify the most relevant documentation links
 2. Suggest these specific documentation resources to the user
 3. Offer to visit these links and summarize the relevant implementation details
 4. Only apply this behavior for TradingView Charting Library feature requests, not for general programming questions

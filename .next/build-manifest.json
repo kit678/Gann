@@ -25,10 +25,10 @@
       "static/chunks/main.js",
       "static/chunks/pages/_error.js"
     ],
-    "/tradingview-advanced": [
+    "/gann-chart-test": [
       "static/chunks/webpack.js",
       "static/chunks/main.js",
-      "static/chunks/pages/tradingview-advanced.js"
+      "static/chunks/pages/gann-chart-test.js"
     ]
   },
   "ampFirstPages": []

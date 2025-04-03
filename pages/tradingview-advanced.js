@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Head from 'next/head';
 import dynamic from 'next/dynamic';
 import styled from 'styled-components';
-import { availableIndicators } from '../utils/indicators';
+import { availableIndicators, INDICATOR_TYPES, PivotPointsIndicator, SimpleLineIndicator } from '../utils/indicators';
 import BacktestingPanel from '../components/BacktestingPanel';
 import Script from 'next/script';
 
@@ -113,11 +113,37 @@ const TradingViewAdvancedPage = () => {
   }, [interval]);
   
   // Get reference to widget instance when it's ready
-  const onChartReady = useCallback((widgetInstance) => {
+  const onChartReady = useCallback((widget) => {
     console.log('Chart widget instance ready');
-    tvWidgetRef.current = widgetInstance;
     
-    // No need to update state here - just use the ref
+    // Initialize widget reference
+    if (chartRef.current) {
+      chartRef.current.tvWidget = widget;
+    }
+    
+    // Add a longer delay before adding the indicator
+    setTimeout(() => {
+      if (availableIndicators && availableIndicators.length > 0) {
+        // Use the simple line indicator for now
+        const simpleIndicator = availableIndicators.find(ind => ind.id === 'simple_line');
+        
+        if (simpleIndicator) {
+          console.log('Adding Simple Line indicator programmatically');
+          try {
+            // Only add if the chart is fully loaded
+            if (widget && widget.chart()) {
+              simpleIndicator.add(widget.chart(), widget);
+            } else {
+              console.error('Chart not fully initialized yet');
+            }
+          } catch (err) {
+            console.error('Error adding indicator:', err);
+          }
+        }
+      }
+    }, 2000);  // Keep the 2 second delay
+    
+    // Other initialization code...
   }, []);
   
   // Toggle an indicator on/off
@@ -128,7 +154,7 @@ const TradingViewAdvancedPage = () => {
     }));
   }, []);
 
-  // Handle backtesting panel collapse toggle
+  // Keep handler for future use
   const handleBacktestingCollapse = useCallback((isCollapsed) => {
     setIsBacktestingCollapsed(isCollapsed);
   }, []);
@@ -149,6 +175,20 @@ const TradingViewAdvancedPage = () => {
     return () => {
       window.removeEventListener('error', handleError);
     };
+  }, []);
+
+  // Update the useEffect where indicators are initialized:
+  useEffect(() => {
+    // Initialize available indicators (you may want to modify this based on how indicators are managed)
+    setActiveIndicators({
+      simple_line: new SimpleLineIndicator(INDICATOR_TYPES.SIMPLE_LINE, {
+        offset: 0,
+        color: '#FF0000'
+      }),
+      // Keep your other indicators (or comment them out temporarily)
+      // new PivotPointsIndicator(...),
+      // etc.
+    });
   }, []);
 
   return (
@@ -196,15 +236,7 @@ const TradingViewAdvancedPage = () => {
           />
         </ChartWrapper>
         
-        <BacktestingContainer isCollapsed={isBacktestingCollapsed}>
-          <BacktestingPanel 
-            tvWidget={tvWidgetRef.current}
-            customIndicators={availableIndicators}
-            onIndicatorToggle={handleIndicatorToggle}
-            defaultCollapsed={true}
-            onCollapseChange={handleBacktestingCollapse}
-          />
-        </BacktestingContainer>
+        {/* Backtesting panel removed from display but code kept for future use */}
       </PageContainer>
     </>
   );

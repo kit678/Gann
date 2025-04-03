@@ -23,7 +23,7 @@ describe('Custom indicators', () => {
     );
     expect(pivotPointsIndicator).toBeDefined();
     expect(pivotPointsIndicator.tvIndicator).toBeDefined();
-    expect(pivotPointsIndicator.tvIndicator.name).toBe('Pivot Points');
+    expect(pivotPointsIndicator.tvIndicator.name).toBe('Pivots High/Low');
     expect(pivotPointsIndicator.tvIndicator.metainfo).toBeDefined();
     expect(pivotPointsIndicator.tvIndicator.constructor).toBeDefined();
     expect(typeof pivotPointsIndicator.tvIndicator.constructor).toBe('function');

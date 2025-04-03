@@ -10,11 +10,5 @@
     "files": [
       "static/chunks/node_modules_next_dist_pages__error_js.js"
     ]
-  },
-  "tradingview-advanced.js -> ../components/TradingViewSimpleChart": {
-    "id": "tradingview-advanced.js -> ../components/TradingViewSimpleChart",
-    "files": [
-      "static/chunks/components_TradingViewSimpleChart_js.js"
-    ]
   }
 }
