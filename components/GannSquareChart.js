@@ -9,135 +9,341 @@ import React, { useRef, useEffect, useState } from 'react';
  * 
  * @param {Object} props - Component props
  * @param {number} props.targetNumber - Target number to highlight on the chart
+ * @param {number} props.sunPosition - Sun position (zodiac degree) to center blue axes on
  * @param {number} props.maxRings - Maximum number of rings to display
  * @param {number} props.cellSize - Size of each cell in pixels
  * @param {boolean} props.highlightSpokes - Whether to highlight cardinal spokes
  */
-const GannSquareChart = ({ targetNumber = 81, maxRings = 4, cellSize = 40, highlightSpokes = true }) => {
+const GannSquareChart = ({ targetNumber = 81, sunPosition = 71, maxRings = 4, cellSize = 40, highlightSpokes = true }) => {
   const canvasRef = useRef(null);
   const [square, setSquare] = useState([]);
   const [dimension, setDimension] = useState(0);
   const [canvasHeight, setCanvasHeight] = useState(0);
   const [canvasWidth, setCanvasWidth] = useState(0);
   const [targetPosition, setTargetPosition] = useState({ row: -1, col: -1 });
+  const [sunPositionCoords, setSunPositionCoords] = useState({ row: -1, col: -1 });
   const [targetFound, setTargetFound] = useState(true);
+  const [sunFound, setSunFound] = useState(true);
+  const [keyLevels, setKeyLevels] = useState({
+    up: [],
+    down: []
+  });
+  
+  // Ensure we have valid sun position
+  const validSunPosition = typeof sunPosition === 'number' && !isNaN(sunPosition) ? sunPosition : 71;
   
   // Build the Gann Square data
   useEffect(() => {
-    console.log("Building Gann Square with targetNumber:", targetNumber);
+    console.log("Building Gann Square with targetNumber:", targetNumber, "and sunPosition:", validSunPosition);
+    
+    // We need to ensure we have enough rings to find all the key levels
+    // Let's add a buffer to maxRings to make sure we can find 3 levels in both directions
+    const initialMaxRings = Math.max(Math.ceil(Math.sqrt(targetNumber) / 2) + 3, maxRings);
+    
     // Build a Gann Square with the ring-by-ring approach
-    function buildGannSquare(target) {
-      // Determine dimension: smallest odd integer with dim^2 >= target
-      // But limit by maxRings to prevent excessive generation
-      const maxRingSize = 2 * maxRings + 1; // 1 center + maxRings*2
-      let dim = Math.ceil(Math.sqrt(target));
-      if (dim % 2 === 0) dim++;
+    function buildGannSquare(target, sun, initialMaxRings) {
+      // Ensure sun and target are valid numbers
+      target = parseInt(target) || 81;
+      sun = parseInt(sun) || 71;
       
-      // Cap the dimension based on maxRings
-      dim = Math.min(dim, maxRingSize);
-      console.log("Calculated dimension:", dim);
+      // Start with initial max rings, which may be increased if needed
+      let effectiveMaxRings = initialMaxRings;
       
-      // Check if target might be outside our current square size
-      const isTargetPossiblyOutside = target > dim * dim;
-      
-      // Create an empty 2D array (dim x dim)
-      const matrix = Array.from({ length: dim }, () => Array(dim).fill(null));
-      
-      // The center coordinates
-      const center = Math.floor((dim - 1) / 2);
-      let row = center;
-      let col = center;
-      
-      // Place '1' in the center
-      matrix[row][col] = 1;
-      
-      // Current value to place
-      let currentVal = 2;
-      let i = 1; // Ring counter
-      
-      // Track where our target number is placed
-      let targetRow = -1;
-      let targetCol = -1;
-      if (target === 1) {
-        targetRow = row;
-        targetCol = col;
-      }
-      
-      // Helper function to move 'steps' in a direction, filling matrix with values
-      function moveSteps(direction, steps) {
-        for (let s = 0; s < steps; s++) {
+      // Function to build the square with a given number of rings
+      function buildSquareWithRings(rings) {
+        // Determine dimension based on rings
+        const maxRingSize = 2 * rings + 1; // 1 center + rings*2
+        const dim = maxRingSize;
+        
+        // Create an empty 2D array (dim x dim)
+        const matrix = Array.from({ length: dim }, () => Array(dim).fill(null));
+        
+        // The center coordinates
+        const center = Math.floor((dim - 1) / 2);
+        let row = center;
+        let col = center;
+        
+        // Place '1' in the center
+        matrix[row][col] = 1;
+        
+        // Current value to place
+        let currentVal = 2;
+        let i = 1; // Ring counter
+        
+        // Track where our target number and sun position are placed
+        let targetRow = -1;
+        let targetCol = -1;
+        let sunRow = -1;
+        let sunCol = -1;
+        
+        if (target === 1) {
+          targetRow = row;
+          targetCol = col;
+        }
+        
+        if (sun === 1) {
+          sunRow = row;
+          sunCol = col;
+        }
+        
+        // Keep track of the sequence of positions for traversal
+        const positionSequence = [{ row: center, col: center, value: 1 }];
+        
+        // Helper function to move 'steps' in a direction, filling matrix with values
+        function moveSteps(direction, steps) {
+          for (let s = 0; s < steps; s++) {
+            if (currentVal > dim * dim) break;
+            
+            switch (direction) {
+              case 'left':  col--; break;
+              case 'up':    row--; break;
+              case 'right': col++; break;
+              case 'down':  row++; break;
+            }
+            
+            matrix[row][col] = currentVal;
+            
+            // Store this position in the sequence
+            positionSequence.push({ row, col, value: currentVal });
+            
+            // Check if this is our target number
+            if (currentVal === target) {
+              targetRow = row;
+              targetCol = col;
+            }
+            
+            // Check if this is our sun position
+            if (currentVal === sun) {
+              sunRow = row;
+              sunCol = col;
+            }
+            
+            currentVal++;
+          }
+        }
+        
+        // Keep adding rings until we've placed all numbers up to dim^2
+        // or reached maxRings
+        while (currentVal <= dim * dim && i <= rings) {
+          // For ring i, do:
+          //  1 step left
+          moveSteps('left', 1);
           if (currentVal > dim * dim) break;
           
-          switch (direction) {
-            case 'left':  col--; break;
-            case 'up':    row--; break;
-            case 'right': col++; break;
-            case 'down':  row++; break;
-          }
+          //  (2i - 1) steps up
+          moveSteps('up', 2*i - 1);
+          if (currentVal > dim * dim) break;
           
-          matrix[row][col] = currentVal;
+          //  (2i) steps right
+          moveSteps('right', 2*i);
+          if (currentVal > dim * dim) break;
           
-          // Check if this is our target number
-          if (currentVal === target) {
-            targetRow = row;
-            targetCol = col;
-          }
+          //  (2i) steps down
+          moveSteps('down', 2*i);
+          if (currentVal > dim * dim) break;
           
-          currentVal++;
+          //  (2i) steps left
+          moveSteps('left', 2*i);
+          if (currentVal > dim * dim) break;
+          
+          i++;
+        }
+        
+        return { 
+          matrix, 
+          dimension: dim, 
+          targetPosition: { row: targetRow, col: targetCol },
+          sunPosition: { row: sunRow, col: sunCol },
+          positionSequence
+        };
+      }
+      
+      // First, build the square with initial rings
+      let result = buildSquareWithRings(effectiveMaxRings);
+      let { matrix, dimension, targetPosition, sunPosition, positionSequence } = result;
+      
+      // Check if target and sun are found
+      const isTargetFound = targetPosition.row !== -1 && targetPosition.col !== -1;
+      const isSunFound = sunPosition.row !== -1 && sunPosition.col !== -1;
+      
+      // If either the target or sun is not found, we might need more rings
+      if (!isTargetFound || !isSunFound) {
+        const maxNeeded = Math.max(target, sun);
+        const neededRings = Math.ceil(Math.sqrt(maxNeeded) / 2);
+        
+        if (neededRings > effectiveMaxRings) {
+          effectiveMaxRings = neededRings;
+          result = buildSquareWithRings(effectiveMaxRings);
+          matrix = result.matrix;
+          dimension = result.dimension;
+          targetPosition = result.targetPosition;
+          sunPosition = result.sunPosition;
+          positionSequence = result.positionSequence;
         }
       }
       
-      // Keep adding rings until we've placed all numbers up to dim^2
-      // or reached maxRings
-      while (currentVal <= dim * dim && i <= maxRings) {
-        // For ring i, do:
-        //  1 step left
-        moveSteps('left', 1);
-        if (currentVal > dim * dim) break;
+      // Find up and down levels only if both target and sun are found
+      const upLevels = [];
+      const downLevels = [];
+      
+      if (isTargetFound && isSunFound) {
+        // Find the index of the target in the position sequence
+        const targetIndex = positionSequence.findIndex(
+          pos => pos.row === targetPosition.row && pos.col === targetPosition.col
+        );
         
-        //  (2i - 1) steps up
-        moveSteps('up', 2*i - 1);
-        if (currentVal > dim * dim) break;
-        
-        //  (2i) steps right
-        moveSteps('right', 2*i);
-        if (currentVal > dim * dim) break;
-        
-        //  (2i) steps down
-        moveSteps('down', 2*i);
-        if (currentVal > dim * dim) break;
-        
-        //  (2i) steps left
-        moveSteps('left', 2*i);
-        if (currentVal > dim * dim) break;
-        
-        i++;
+        if (targetIndex !== -1) {
+          // Function to check if a position is on a blue axis (aligned with sun)
+          function isOnBlueAxis(row, col) {
+            const sunRow = sunPosition.row;
+            const sunCol = sunPosition.col;
+            
+            // Check if on same row (horizontal)
+            if (row === sunRow) return true;
+            
+            // Check if on same column (vertical)
+            if (col === sunCol) return true;
+            
+            // Check if on diagonal (top-left to bottom-right)
+            if (row - sunRow === col - sunCol) return true;
+            
+            // Check if on diagonal (top-right to bottom-left)
+            if (row - sunRow === -(col - sunCol)) return true;
+            
+            return false;
+          }
+          
+          // Forward traversal for up levels
+          let upLevelCount = 0;
+          let upIndex = targetIndex + 1;
+          
+          while (upLevelCount < 3 && upIndex < positionSequence.length) {
+            const pos = positionSequence[upIndex];
+            
+            if (isOnBlueAxis(pos.row, pos.col)) {
+              upLevels.push({
+                row: pos.row,
+                col: pos.col,
+                value: pos.value
+              });
+              upLevelCount++;
+            }
+            
+            upIndex++;
+          }
+          
+          // If we didn't find enough up levels, we might need to extend the spiral
+          if (upLevelCount < 3) {
+            // Extend the spiral and rebuild
+            effectiveMaxRings += 3; // Add more rings
+            result = buildSquareWithRings(effectiveMaxRings);
+            
+            // Update variables with new result
+            matrix = result.matrix;
+            dimension = result.dimension;
+            targetPosition = result.targetPosition;
+            sunPosition = result.sunPosition;
+            positionSequence = result.positionSequence;
+            
+            // Find the target index again in the new sequence
+            const newTargetIndex = positionSequence.findIndex(
+              pos => pos.row === targetPosition.row && pos.col === targetPosition.col
+            );
+            
+            // Clear previously found levels and try again
+            upLevels.length = 0;
+            upLevelCount = 0;
+            upIndex = newTargetIndex + 1;
+            
+            while (upLevelCount < 3 && upIndex < positionSequence.length) {
+              const pos = positionSequence[upIndex];
+              
+              if (isOnBlueAxis(pos.row, pos.col)) {
+                upLevels.push({
+                  row: pos.row,
+                  col: pos.col,
+                  value: pos.value
+                });
+                upLevelCount++;
+              }
+              
+              upIndex++;
+            }
+          }
+          
+          // Backward traversal for down levels
+          let downLevelCount = 0;
+          let downIndex = targetIndex - 1;
+          
+          while (downLevelCount < 3 && downIndex >= 0) {
+            const pos = positionSequence[downIndex];
+            
+            if (isOnBlueAxis(pos.row, pos.col)) {
+              downLevels.push({
+                row: pos.row,
+                col: pos.col,
+                value: pos.value
+              });
+              downLevelCount++;
+            }
+            
+            downIndex--;
+          }
+        }
       }
       
-      return { 
-        matrix, 
-        dimension: dim, 
-        targetPosition: { row: targetRow, col: targetCol },
-        targetFound: !isTargetPossiblyOutside || (targetRow !== -1 && targetCol !== -1)
+      console.log("Up levels:", upLevels.map(l => l.value));
+      console.log("Down levels:", downLevels.map(l => l.value));
+      
+      return {
+        matrix,
+        dimension,
+        targetPosition,
+        sunPosition,
+        targetFound: isTargetFound,
+        sunFound: isSunFound,
+        keyLevels: {
+          up: upLevels,
+          down: downLevels
+        },
+        effectiveMaxRings
       };
     }
     
-    const { matrix, dimension, targetPosition, targetFound } = buildGannSquare(targetNumber);
+    const { 
+      matrix, 
+      dimension, 
+      targetPosition, 
+      sunPosition, 
+      targetFound, 
+      sunFound, 
+      keyLevels,
+      effectiveMaxRings 
+    } = buildGannSquare(targetNumber, validSunPosition, initialMaxRings);
+    
     console.log("Built matrix with dimension:", dimension);
     console.log("Target number position:", targetPosition);
+    console.log("Sun position coordinates:", sunPosition);
     console.log("Target found:", targetFound);
+    console.log("Sun found:", sunFound);
+    console.log("Using effective max rings:", effectiveMaxRings);
+    console.log("Key levels:", keyLevels);
+    
     setSquare(matrix);
     setDimension(dimension);
     setTargetPosition(targetPosition);
+    setSunPositionCoords(sunPosition);
     setTargetFound(targetFound);
+    setSunFound(sunFound);
+    setKeyLevels(keyLevels);
     
     // Calculate canvas dimensions
     const totalWidth = dimension * cellSize;
-    const totalHeight = dimension * cellSize + 40; // Add 40px for legend
+    const totalHeight = dimension * cellSize + 60; // Add 60px for legend
     setCanvasWidth(totalWidth);
     setCanvasHeight(totalHeight);
     
-  }, [targetNumber, maxRings, cellSize]);
+  }, [targetNumber, validSunPosition, maxRings, cellSize]);
 
   // Draw the Gann Square on canvas
   useEffect(() => {
@@ -157,7 +363,7 @@ const GannSquareChart = ({ targetNumber = 81, maxRings = 4, cellSize = 40, highl
     // Set canvas size
     const size = dimension * cellSize;
     canvas.width = size;
-    canvas.height = size + 40; // Add space for legend
+    canvas.height = size + 60; // Add space for legend
     
     console.log("Canvas dimensions set to:", canvas.width, "x", canvas.height);
     
@@ -184,14 +390,22 @@ const GannSquareChart = ({ targetNumber = 81, maxRings = 4, cellSize = 40, highl
       ctx.stroke();
     }
     
-    // Draw the original spokes if enabled
+    // Find center and sun position coordinates for drawing axes
+    const centerX = Math.floor((dimension - 1) / 2) * cellSize + cellSize / 2;
+    const centerY = Math.floor((dimension - 1) / 2) * cellSize + cellSize / 2;
+    
+    const sunX = sunPositionCoords.row >= 0 && sunPositionCoords.col >= 0 ? 
+                 sunPositionCoords.col * cellSize + cellSize / 2 : 
+                 centerX;
+                 
+    const sunY = sunPositionCoords.row >= 0 && sunPositionCoords.col >= 0 ? 
+                 sunPositionCoords.row * cellSize + cellSize / 2 : 
+                 centerY;
+    
+    // Draw the original spokes if enabled (lighter shade now)
     if (highlightSpokes) {
-      ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)';
-      ctx.lineWidth = 2;
-      
-      // Find center coordinates
-      const centerX = Math.floor((dimension - 1) / 2) * cellSize + cellSize / 2;
-      const centerY = Math.floor((dimension - 1) / 2) * cellSize + cellSize / 2;
+      ctx.strokeStyle = 'rgba(255, 0, 0, 0.15)'; // Very light red
+      ctx.lineWidth = 1.5;
       
       // Draw the 8 cardinal spokes
       // Horizontal
@@ -218,36 +432,51 @@ const GannSquareChart = ({ targetNumber = 81, maxRings = 4, cellSize = 40, highl
       ctx.lineTo(0, size);
       ctx.stroke();
       
-      // 45° spokes
-      // Top-left to center
-      ctx.beginPath();
-      ctx.moveTo(0, centerY);
-      ctx.lineTo(centerX, 0);
-      ctx.stroke();
-      
-      // Top-right to center
-      ctx.beginPath();
-      ctx.moveTo(size, centerY);
-      ctx.lineTo(centerX, 0);
-      ctx.stroke();
-      
-      // Bottom-left to center
-      ctx.beginPath();
-      ctx.moveTo(0, centerY);
-      ctx.lineTo(centerX, size);
-      ctx.stroke();
-      
-      // Bottom-right to center
-      ctx.beginPath();
-      ctx.moveTo(size, centerY);
-      ctx.lineTo(centerX, size);
-      ctx.stroke();
+      // Draw the blue spokes through sun position if found
+      if (sunPositionCoords.row >= 0 && sunPositionCoords.col >= 0) {
+        ctx.strokeStyle = 'rgba(0, 100, 255, 0.5)'; // Medium blue
+        ctx.lineWidth = 2;
+        
+        // Horizontal through sun
+        ctx.beginPath();
+        ctx.moveTo(0, sunY);
+        ctx.lineTo(size, sunY);
+        ctx.stroke();
+        
+        // Vertical through sun
+        ctx.beginPath();
+        ctx.moveTo(sunX, 0);
+        ctx.lineTo(sunX, size);
+        ctx.stroke();
+        
+        // Diagonal 1 (top-left to bottom-right) through sun
+        const diag1Slope = 1; // Slope is 1 for 45-degree line
+        const diag1Intercept = sunY - diag1Slope * sunX;
+        
+        ctx.beginPath();
+        ctx.moveTo(0, diag1Intercept);
+        ctx.lineTo(size, diag1Slope * size + diag1Intercept);
+        ctx.stroke();
+        
+        // Diagonal 2 (top-right to bottom-left) through sun
+        const diag2Slope = -1; // Slope is -1 for 135-degree line
+        const diag2Intercept = sunY - diag2Slope * sunX;
+        
+        ctx.beginPath();
+        ctx.moveTo(0, diag2Slope * 0 + diag2Intercept);
+        ctx.lineTo(size, diag2Slope * size + diag2Intercept);
+        ctx.stroke();
+      }
     }
     
     // Fill in numbers
     ctx.fillStyle = '#333';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    
+    // Collect cells to highlight
+    const upKeyLevelCells = keyLevels.up.map(level => ({ row: level.row, col: level.col }));
+    const downKeyLevelCells = keyLevels.down.map(level => ({ row: level.row, col: level.col }));
     
     for (let row = 0; row < dimension; row++) {
       for (let col = 0; col < dimension; col++) {
@@ -257,7 +486,7 @@ const GannSquareChart = ({ targetNumber = 81, maxRings = 4, cellSize = 40, highl
           const x = col * cellSize + cellSize / 2;
           const y = row * cellSize + cellSize / 2;
           
-          // Highlight cells on original spokes
+          // Highlight cells on original spokes (very light)
           if (highlightSpokes) {
             const centerRow = Math.floor((dimension - 1) / 2);
             const centerCol = Math.floor((dimension - 1) / 2);
@@ -269,7 +498,7 @@ const GannSquareChart = ({ targetNumber = 81, maxRings = 4, cellSize = 40, highl
             const isOnDiagonal2 = row - centerRow === -(col - centerCol); // top-right to bottom-left
             
             if (isOnVertical || isOnHorizontal || isOnDiagonal1 || isOnDiagonal2) {
-              ctx.fillStyle = 'rgba(255, 220, 220, 0.5)'; // light red background for cells on spokes
+              ctx.fillStyle = 'rgba(255, 220, 220, 0.25)'; // Very light red background
               ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
               ctx.fillStyle = '#333'; // reset text color
             }
@@ -292,6 +521,39 @@ const GannSquareChart = ({ targetNumber = 81, maxRings = 4, cellSize = 40, highl
             ctx.fillStyle = '#333';
           }
           
+          // Highlight Sun position
+          if (row === sunPositionCoords.row && col === sunPositionCoords.col) {
+            ctx.fillStyle = 'rgba(255, 215, 0, 0.6)'; // Gold for sun
+            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+            
+            // Draw sun symbol
+            ctx.beginPath();
+            ctx.arc(x, y, cellSize * 0.3, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 165, 0, 0.8)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            
+            // Draw sun rays
+            const rayLength = cellSize * 0.15;
+            for (let angle = 0; angle < 360; angle += 45) {
+              const radian = angle * Math.PI / 180;
+              const startX = x + Math.cos(radian) * cellSize * 0.3;
+              const startY = y + Math.sin(radian) * cellSize * 0.3;
+              const endX = x + Math.cos(radian) * (cellSize * 0.3 + rayLength);
+              const endY = y + Math.sin(radian) * (cellSize * 0.3 + rayLength);
+              
+              ctx.beginPath();
+              ctx.moveTo(startX, startY);
+              ctx.lineTo(endX, endY);
+              ctx.strokeStyle = 'rgba(255, 165, 0, 0.8)';
+              ctx.stroke();
+            }
+            
+            ctx.fillStyle = '#333'; // reset text color
+          }
+          
           // Highlight target number
           if (row === targetPosition.row && col === targetPosition.col) {
             ctx.fillStyle = 'rgba(255, 165, 0, 0.6)'; // orange for target number
@@ -301,6 +563,32 @@ const GannSquareChart = ({ targetNumber = 81, maxRings = 4, cellSize = 40, highl
             // Draw a border around the target number
             ctx.strokeStyle = 'rgba(255, 165, 0, 1)';
             ctx.lineWidth = 2;
+            ctx.strokeRect(col * cellSize, row * cellSize, cellSize, cellSize);
+          }
+          
+          // Highlight up key levels (next three after target)
+          const isUpKeyLevel = upKeyLevelCells.some(cell => cell.row === row && cell.col === col);
+          if (isUpKeyLevel) {
+            ctx.fillStyle = 'rgba(0, 200, 0, 0.4)'; // Green for up levels
+            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+            ctx.fillStyle = '#333';
+            
+            // Draw a border around the up level
+            ctx.strokeStyle = 'rgba(0, 200, 0, 0.8)';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(col * cellSize, row * cellSize, cellSize, cellSize);
+          }
+          
+          // Highlight down key levels (previous three before target)
+          const isDownKeyLevel = downKeyLevelCells.some(cell => cell.row === row && cell.col === col);
+          if (isDownKeyLevel) {
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.4)'; // Red for down levels
+            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+            ctx.fillStyle = '#333';
+            
+            // Draw a border around the down level
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+            ctx.lineWidth = 1.5;
             ctx.strokeRect(col * cellSize, row * cellSize, cellSize, cellSize);
           }
           
@@ -329,23 +617,48 @@ const GannSquareChart = ({ targetNumber = 81, maxRings = 4, cellSize = 40, highl
     ctx.fillStyle = '#333';
     ctx.fillText('Odd squares (9, 25, 49...)', 200, size + 20);
     
-    // Target number
-    ctx.fillStyle = 'rgba(255, 165, 0, 0.6)';
+    // Sun position
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
     ctx.fillRect(380, size + 10, 15, 15);
     ctx.fillStyle = '#333';
-    ctx.fillText(`Target Number (${targetNumber})`, 400, size + 20);
+    ctx.fillText(`Sun Position (${validSunPosition})`, 400, size + 20);
     
-    // Spoke cells
+    // Target number
+    ctx.fillStyle = 'rgba(255, 165, 0, 0.6)';
+    ctx.fillRect(550, size + 10, 15, 15);
+    ctx.fillStyle = '#333';
+    ctx.fillText(`Target Number (${targetNumber})`, 570, size + 20);
+    
+    // Key levels
+    // Up levels
+    ctx.fillStyle = 'rgba(0, 200, 0, 0.4)';
+    ctx.fillRect(80, size + 35, 15, 15);
+    ctx.fillStyle = '#333';
+    ctx.fillText('Up Levels', 100, size + 45);
+    
+    // Down levels
+    ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
+    ctx.fillRect(180, size + 35, 15, 15);
+    ctx.fillStyle = '#333';
+    ctx.fillText('Down Levels', 200, size + 45);
+    
+    // Red spokes
     if (highlightSpokes) {
-      ctx.fillStyle = 'rgba(255, 220, 220, 0.5)';
-      ctx.fillRect(550, size + 10, 15, 15);
+      ctx.fillStyle = 'rgba(255, 220, 220, 0.25)';
+      ctx.fillRect(330, size + 35, 15, 15);
       ctx.fillStyle = '#333';
-      ctx.fillText('Cardinal spokes', 570, size + 20);
+      ctx.fillText('Original Axes (Center)', 350, size + 45);
+      
+      // Blue spokes
+      ctx.fillStyle = 'rgba(0, 100, 255, 0.3)';
+      ctx.fillRect(500, size + 35, 15, 15);
+      ctx.fillStyle = '#333';
+      ctx.fillText('Sun Axes', 520, size + 45);
     }
     
     console.log("Canvas drawing complete");
     
-  }, [square, dimension, cellSize, highlightSpokes, targetPosition, targetNumber]);
+  }, [square, dimension, cellSize, highlightSpokes, targetPosition, targetNumber, sunPositionCoords, validSunPosition, keyLevels]);
   
   return (
     <div className="gann-square-container">
@@ -360,7 +673,19 @@ const GannSquareChart = ({ targetNumber = 81, maxRings = 4, cellSize = 40, highl
           border: '1px solid #d9534f'
         }}>
           Target number {targetNumber} may not be visible with current max rings setting. 
-          Consider increasing max rings to see it.
+          Consider increasing target number to see it.
+        </div>
+      )}
+      {!sunFound && (
+        <div className="warning-message" style={{ 
+          color: '#d9534f', 
+          background: '#f9f2f2', 
+          padding: '10px', 
+          borderRadius: '4px',
+          marginBottom: '10px',
+          border: '1px solid #d9534f'
+        }}>
+          Sun position {validSunPosition} may not be visible with current max rings setting.
         </div>
       )}
       <div>
@@ -380,19 +705,23 @@ const GannSquareChart = ({ targetNumber = 81, maxRings = 4, cellSize = 40, highl
       <div className="chart-legend" style={{ padding: '10px', marginTop: '10px' }}>
         <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
+            <span style={{ width: '15px', height: '15px', backgroundColor: 'rgba(100, 200, 100, 0.5)', borderRadius: '3px', display: 'inline-block', marginRight: '5px' }}></span>
+            <span>Center (1)</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <span style={{ width: '15px', height: '15px', backgroundColor: 'rgba(255, 215, 0, 0.6)', borderRadius: '50%', display: 'inline-block', marginRight: '5px' }}></span>
+            <span>Sun Position ({validSunPosition})</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
             <span style={{ width: '15px', height: '15px', backgroundColor: 'rgba(255, 165, 0, 0.6)', borderRadius: '3px', display: 'inline-block', marginRight: '5px' }}></span>
             <span>Target Number ({targetNumber})</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <span style={{ width: '15px', height: '15px', backgroundColor: 'green', borderRadius: '50%', display: 'inline-block', marginRight: '5px' }}></span>
-            <span>Current Price</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <span style={{ width: '15px', height: '15px', backgroundColor: 'red', borderRadius: '50%', display: 'inline-block', marginRight: '5px' }}></span>
+            <span style={{ width: '15px', height: '15px', backgroundColor: 'rgba(0, 200, 0, 0.4)', borderRadius: '3px', display: 'inline-block', marginRight: '5px' }}></span>
             <span>Up Levels</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <span style={{ width: '15px', height: '15px', backgroundColor: 'blue', borderRadius: '50%', display: 'inline-block', marginRight: '5px' }}></span>
+            <span style={{ width: '15px', height: '15px', backgroundColor: 'rgba(255, 0, 0, 0.4)', borderRadius: '3px', display: 'inline-block', marginRight: '5px' }}></span>
             <span>Down Levels</span>
           </div>
         </div>

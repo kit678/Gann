@@ -1,14 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import GannSquareChart from '../components/GannSquareChart';
+import { useAppContext } from '../contexts/AppContext';
 
 const GannChartTest = () => {
+  const { sunPosition } = useAppContext();
   const [inputNumber, setInputNumber] = useState(81);
-  const [multiplyBy10, setMultiplyBy10] = useState(false);
+  const [multiplyBy10, setMultiplyBy10] = useState(true);
   const [targetNumber, setTargetNumber] = useState(81);
   const [maxRings, setMaxRings] = useState(4);
   const [cellSize, setCellSize] = useState(40);
   const [highlightSpokes, setHighlightSpokes] = useState(true);
+
+  // Get the sun degree in 0-360 format
+  const getSunDegree = () => {
+    if (!sunPosition) return 71; // Default value if sunPosition is not available
+    
+    // Extract zodiac sign and degrees
+    const zodiacSigns = [
+      'Aries', 'Taurus', 'Gemini', 'Cancer', 
+      'Leo', 'Virgo', 'Libra', 'Scorpio', 
+      'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'
+    ];
+    
+    const zodiacIndex = zodiacSigns.indexOf(sunPosition.zodiac_sign);
+    if (zodiacIndex === -1) return 71; // Default if sign not found
+    
+    // Calculate absolute position (0-360)
+    const absoluteDegree = (zodiacIndex * 30) + (sunPosition.degrees_in_sign || 0);
+    return Math.round(absoluteDegree);
+  };
 
   // Calculate the target number based on input number and multiplier checkbox
   useEffect(() => {
@@ -58,17 +79,6 @@ const GannChartTest = () => {
           </div>
           
           <div className="form-group">
-            <label>Max Rings:</label>
-            <input 
-              type="number" 
-              value={maxRings} 
-              onChange={(e) => setMaxRings(parseInt(e.target.value) || 1)} 
-              min="1" 
-              max="10" 
-            />
-          </div>
-          
-          <div className="form-group">
             <label>Cell Size (px):</label>
             <input 
               type="number" 
@@ -94,6 +104,7 @@ const GannChartTest = () => {
         <div className="chart-container">
           <GannSquareChart 
             targetNumber={targetNumber}
+            sunPosition={getSunDegree()}
             maxRings={maxRings}
             cellSize={cellSize}
             highlightSpokes={highlightSpokes}
