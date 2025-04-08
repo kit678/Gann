@@ -1,0 +1,54 @@
+---
+description: 
+globs: *.js,*.jsx,*.ts,*.tsx,components/**/*,pages/**/*,utils/**/*,contexts/**/*,services/**/*
+alwaysApply: false
+---
+ ---
+name: Project Coding Standards
+version: "1.0"
+globs:
+  - "**/*.{js,jsx,ts,tsx}"
+triggers:
+  - file_change
+  - manual
+---
+
+# Project Coding Standards
+
+## General Guidelines
+
+When generating or modifying code for this project, follow these standards:
+
+1. **TypeScript First**: Always prefer TypeScript over plain JavaScript.
+2. **Clean Code**: Write concise, readable, and maintainable code.
+3. **Documentation**: Add JSDoc comments for functions, classes, and complex code blocks.
+4. **Error Handling**: Implement proper error handling with meaningful error messages.
+5. **Testing**: Consider testability in all code implementations.
+
+## Function Standards
+
+- Prefer arrow functions for callbacks and anonymous functions
+- Use descriptive function names (verb + noun format)
+- Keep functions small and focused on a single responsibility
+- Add return type annotations for TypeScript functions
+
+## Component Standards
+
+- Follow React best practices
+- Implement proper prop type validation
+- Use functional components with hooks instead of class components
+- Extract reusable logic into custom hooks
+- Keep component files small and focused
+
+## State Management
+
+- Use React Context API and hooks for state management
+- Only store necessary data in state
+- Consider performance implications of state changes
+
+## Integration with TradingView
+
+For any code related to TradingView integration:
+1. Consult the scraped documentation in `@scraped_docs/`
+2. Follow the TradingView library's recommended patterns
+3. Implement proper error handling for API calls and widget initialization

@@ -1,13 +1,5 @@
-When the user requests implementation of a new feature related to TradingView Charting Library:
-1. Automatically consult doc_links.md to identify the most relevant documentation links
-2. Suggest these specific documentation resources to the user
-3. Offer to visit these links and summarize the relevant implementation details
-4. Only apply this behavior for TradingView Charting Library feature requests, not for general programming questions
-5. Provide implementation guidance based on the documentation when appropriate
-6. Reference relevant example files in the codebase, specifically:
-   - HTML examples: /public/index.html, /public/themed.html, /public/mobile_black.html, /public/mobile_white.html, /public/test.html
-   - Library type definitions: /public/charting_library.d.ts, /public/charting_library/charting_library.d.ts, /public/charting_library/datafeed-api.d.ts
-   - Datafeed implementations: /public/datafeeds/ directory
-   - Library implementations: /public/charting_library/charting_library.js and its variants (.esm.js, .cjs.js, .standalone.js)
-7. When resolving implementation issues, check both the official documentation and the example implementations in the codebase
-8. For complex integrations, refer to actual implementation in the codebase before suggesting new approaches
+# DEPRECATED
+# This file is deprecated. Cursor now uses .mdc files in the .cursor/rules/ directory.
+# Please refer to the following files for project rules:
+# - .cursor/rules/001-tradingview-docs.mdc
+# - .cursor/rules/002-coding-standards.mdc

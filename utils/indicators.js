@@ -216,7 +216,7 @@ export class GeometricTrendLine extends CustomIndicator {
     this.remove(chart);
     
     // Then recreate them for new range
-    this._createTrendLine(chart, chart.getVisibleRange());
+    this._createTrendLine(chart.getVisibleRange());
   }
 }
 
@@ -531,126 +531,183 @@ export class PivotPointsIndicator extends CustomIndicator {
       'Identifies and marks swing highs and lows in price action'
     );
     
-    // Default settings
     this.settings = {
       lookbackBars: 5,
+      // Colors are not used for plotting now, but keep for potential future use
       highColor: '#F44336',
       lowColor: '#4CAF50'
     };
     
     // The TV-compatible indicator definition
     this.tvIndicator = {
-      name: "Pivots High/Low",
+      name: "Pivots High/Low", // Revert name
       metainfo: {
         _metainfoVersion: 51,
-        id: "PivotPoints@tv-basicstudies-1",
+        id: "PivotPoints@tv-basicstudies-1", // Revert ID
         name: "Pivots High/Low",
-        description: "Pivots High/Low",
-        shortDescription: "Pivots",
-        is_price_study: true,
+        description: "Identifies and marks swing highs and lows in price action", // Revert description
+        shortDescription: "Pivots", // Revert shortDescription
+        
+        is_price_study: true, // Set to true to draw on main price chart
         isCustomIndicator: true,
+        overlay: true, // Keep overlay true
         
-        // Important: Set this to true to make it show as an overlay
-        overlay: true,
-        
-        // Add format specification - this is required
         format: {
-          type: "price",
-          precision: 2
+          type: "inherit", 
         },
         
-        // Plot definitions
+        // Define plots for high and low pivot shapes
         plots: [
-          {
-            id: "pivot_high",
-            type: "shapes"
-          },
-          {
-            id: "pivot_low", 
-            type: "shapes"
-          }
+          { id: "pivot_high", type: "shapes" },
+          { id: "pivot_low",  type: "shapes" }
         ],
-        
-        // Define styles with proper price format
+        // Define styles for the shapes (arrows)
         styles: {
           pivot_high: { 
             title: "Pivot High", 
-            color: "#F44336",
-            plottype: 8, // Shape plot type
-            location: "AboveBar",
-            // Add price format
-            priceFormat: {
-              type: "price",
-              precision: 2
-            }
+            visible: true,
+            color: this.settings.highColor, // Use setting
+            plottype: 8, // Shapes plot type
+            location: "AboveBar", // Place above the bar
+            shape: 3, // Arrow Down shape (adjust if needed based on library version)
+            size: 'normal',
+            text: "", // No text needed for simple arrow
+            showPrice: false,
+            transparency: 0
           },
           pivot_low: { 
             title: "Pivot Low", 
-            color: "#4CAF50",
-            plottype: 8, // Shape plot type
-            location: "BelowBar",
-            // Add price format
-            priceFormat: {
-              type: "price",
-              precision: 2
-            }
+            visible: true,
+            color: this.settings.lowColor, // Use setting
+            plottype: 8, // Shapes plot type
+            location: "BelowBar", // Place below the bar
+            shape: 2, // Arrow Up shape (adjust if needed based on library version)
+            size: 'normal',
+            text: "", // No text needed for simple arrow
+            showPrice: false,
+            transparency: 0
           }
         },
-        
-        // Input parameters
         inputs: [
-          {
-            id: "lookback",
-            name: "Lookback Bars",
-            defval: 5,
-            type: "integer",
-            min: 1,
-            max: 50
-          }
-        ]
+          { id: "lookback", name: "Lookback Bars", defval: 5, type: "integer", min: 1, max: 50 }
+        ],
+        defaults: {
+          // Define defaults for styles
+          styles: {
+            pivot_high: { color: "#F44336", shape: 3 },
+            pivot_low: { color: "#4CAF50", shape: 2 }
+          },
+          inputs: { lookback: 5 } 
+        }
       },
-      
-      // The constructor is the implementation of the indicator
+
+      // Constructor remains the same
       constructor: function() {
         this.init = function(context, inputCallback) {
           this._context = context;
           this._input = inputCallback;
           
-          // Define the main series
-          var lookback = this._input("lookback");
-          
-          // Define plot mapping to outputs
-          this._context.new_var("high_pivot", false);
-          this._context.new_var("low_pivot", false);
+          this._histHighs = context.new_var();
+          this._histLows = context.new_var();
+          this._histTimes = context.new_var(); 
         };
-        
+
         this.main = function(context, inputCallback) {
-          this._context = context;
-          this._input = inputCallback;
-          
-          var lookback = this._input("lookback");
-          
-          // Get data
-          var high = this._context.high;
-          var low = this._context.low;
-          
-          // Check for pivot high
-          var isPivotHigh = this._context.Highest(high, lookback*2+1, lookback) == high[lookback];
-          
-          // Check for pivot low
-          var isPivotLow = this._context.Lowest(low, lookback*2+1, lookback) == low[lookback];
-          
-          // Return results
-          return [isPivotHigh ? 1 : NaN, isPivotLow ? 1 : NaN];
+          try {
+            this._context = context;
+            this._input = inputCallback;
+
+            const lookback = this._input('lookback') || 5; 
+            const requiredHistory = lookback * 2 + 1;
+
+            const currentHigh = context.symbol.high;
+            const currentLow = context.symbol.low;
+            const currentTime = context.symbol.time; 
+            const barIndex = context.symbol.index;
+
+            let histHighs = this._histHighs.get() || [];
+            let histLows = this._histLows.get() || [];
+            let histTimes = this._histTimes.get() || []; 
+
+            histHighs.push(currentHigh);
+            histLows.push(currentLow);
+            histTimes.push(currentTime);
+
+            const maxSize = requiredHistory + lookback; 
+            if (histHighs.length > maxSize) {
+              histHighs = histHighs.slice(-maxSize);
+              histLows = histLows.slice(-maxSize);
+              histTimes = histTimes.slice(-maxSize); 
+            }
+
+            this._histHighs.set(histHighs);
+            this._histLows.set(histLows);
+            this._histTimes.set(histTimes); 
+
+            const pivotCandidateIndexInBuffer = histHighs.length - 1 - lookback;
+            
+            // Initialize results with { value: null } structure
+            let highResult = { value: null };
+            let lowResult = { value: null };
+
+            if (pivotCandidateIndexInBuffer >= lookback) {
+              const pivotCandidateHigh = histHighs[pivotCandidateIndexInBuffer];
+              const pivotCandidateLow = histLows[pivotCandidateIndexInBuffer];
+              const pivotCandidateTime = histTimes[pivotCandidateIndexInBuffer]; 
+
+              let isPivotHigh = true;
+              let isPivotLow = true;
+
+              for (let i = 1; i <= lookback; i++) {
+                if (histHighs[pivotCandidateIndexInBuffer - i] >= pivotCandidateHigh) {
+                  isPivotHigh = false;
+                }
+                if (histLows[pivotCandidateIndexInBuffer - i] <= pivotCandidateLow) {
+                  isPivotLow = false;
+                }
+                if (histHighs[pivotCandidateIndexInBuffer + i] >= pivotCandidateHigh) {
+                  isPivotHigh = false;
+                }
+                if (histLows[pivotCandidateIndexInBuffer + i] <= pivotCandidateLow) {
+                  isPivotLow = false;
+                }
+              }
+
+              // If pivot confirmed, set the result object with the actual price
+              if (isPivotHigh) {
+                // Update the value property with the pivot price
+                highResult.value = pivotCandidateHigh; 
+                // Logging remains the same
+                const confirmedPivotBarIndex = barIndex - lookback;
+                const pivotDate = new Date(pivotCandidateTime).toLocaleString();
+                console.log(`CONFIRMED Pivot High at bar ${confirmedPivotBarIndex}: Date ${pivotDate}, Price ${pivotCandidateHigh.toFixed(2)}`);
+              }
+              if (isPivotLow) {
+                // Update the value property with the pivot price
+                lowResult.value = pivotCandidateLow; 
+                // Logging remains the same
+                const confirmedPivotBarIndex = barIndex - lookback;
+                const pivotDate = new Date(pivotCandidateTime).toLocaleString();
+                console.log(`CONFIRMED Pivot Low at bar ${confirmedPivotBarIndex}: Date ${pivotDate}, Price ${pivotCandidateLow.toFixed(2)}`);
+              }
+            } 
+            
+            // Return objects with value (price or null) for the shapes plots
+            return [highResult, lowResult]; 
+
+          } catch (error) {
+            console.error('PivotPointsIndicator main function error:', error);
+            // Return objects with null value on error
+            return [{ value: null }, { value: null }]; 
+          }
         };
       }
     };
   }
-  
-  // Add method to register the indicator with TradingView
+
+  // Register method - reverted name
   register(chart, widget) {
-    console.log('Registering Pivot Points indicator');
-    // This will be handled by the custom_indicators_getter in tradingviewIntegration.js
+    console.log('Registering Pivot Points indicator (with shapes)');
   }
 }
 

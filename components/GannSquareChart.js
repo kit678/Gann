@@ -16,6 +16,7 @@ import React, { useRef, useEffect, useState } from 'react';
  */
 const GannSquareChart = ({ targetNumber = 81, sunPosition = 71, maxRings = 4, cellSize = 40, highlightSpokes = true }) => {
   const canvasRef = useRef(null);
+  const canvasContainerRef = useRef(null);
   const [square, setSquare] = useState([]);
   const [dimension, setDimension] = useState(0);
   const [canvasHeight, setCanvasHeight] = useState(0);
@@ -28,6 +29,9 @@ const GannSquareChart = ({ targetNumber = 81, sunPosition = 71, maxRings = 4, ce
     up: [],
     down: []
   });
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [startPanPosition, setStartPanPosition] = useState({ x: 0, y: 0 });
   
   // Ensure we have valid sun position
   const validSunPosition = typeof sunPosition === 'number' && !isNaN(sunPosition) ? sunPosition : 71;
@@ -343,7 +347,48 @@ const GannSquareChart = ({ targetNumber = 81, sunPosition = 71, maxRings = 4, ce
     setCanvasWidth(totalWidth);
     setCanvasHeight(totalHeight);
     
+    // Reset panning when data changes
+    setPanOffset({ x: 0, y: 0 });
+    
   }, [targetNumber, validSunPosition, maxRings, cellSize]);
+
+  // Handle mouse events for panning
+  const startPan = (e) => {
+    setIsPanning(true);
+    setStartPanPosition({
+      x: e.clientX - panOffset.x,
+      y: e.clientY - panOffset.y
+    });
+  };
+  
+  const doPan = (e) => {
+    if (isPanning) {
+      setPanOffset({
+        x: e.clientX - startPanPosition.x,
+        y: e.clientY - startPanPosition.y
+      });
+    }
+  };
+  
+  const endPan = () => {
+    setIsPanning(false);
+  };
+  
+  // Setup event listeners for panning
+  useEffect(() => {
+    const container = canvasContainerRef.current;
+    if (!container) return;
+    
+    container.addEventListener('mousedown', startPan);
+    window.addEventListener('mousemove', doPan);
+    window.addEventListener('mouseup', endPan);
+    
+    return () => {
+      container.removeEventListener('mousedown', startPan);
+      window.removeEventListener('mousemove', doPan);
+      window.removeEventListener('mouseup', endPan);
+    };
+  }, [isPanning, startPanPosition]);
 
   // Draw the Gann Square on canvas
   useEffect(() => {
@@ -369,6 +414,10 @@ const GannSquareChart = ({ targetNumber = 81, sunPosition = 71, maxRings = 4, ce
     
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Apply panning transformation
+    ctx.save();
+    ctx.translate(panOffset.x, panOffset.y);
     
     // Draw grid
     ctx.strokeStyle = '#ddd';
@@ -599,6 +648,9 @@ const GannSquareChart = ({ targetNumber = 81, sunPosition = 71, maxRings = 4, ce
       }
     }
     
+    // Restore the canvas context (removes panning transformation before drawing legend)
+    ctx.restore();
+    
     // Add a legend
     ctx.fillStyle = '#333';
     ctx.font = '12px Arial';
@@ -658,11 +710,14 @@ const GannSquareChart = ({ targetNumber = 81, sunPosition = 71, maxRings = 4, ce
     
     console.log("Canvas drawing complete");
     
-  }, [square, dimension, cellSize, highlightSpokes, targetPosition, targetNumber, sunPositionCoords, validSunPosition, keyLevels]);
+  }, [square, dimension, cellSize, highlightSpokes, targetPosition, targetNumber, sunPositionCoords, validSunPosition, keyLevels, panOffset]);
+  
+  // Format key levels for display
+  const upLevelsDisplay = keyLevels.up.map(level => level.value).join(', ');
+  const downLevelsDisplay = keyLevels.down.map(level => level.value).join(', ');
   
   return (
     <div className="gann-square-container">
-      <h3>Gann Square of 9</h3>
       {!targetFound && (
         <div className="warning-message" style={{ 
           color: '#d9534f', 
@@ -688,13 +743,42 @@ const GannSquareChart = ({ targetNumber = 81, sunPosition = 71, maxRings = 4, ce
           Sun position {validSunPosition} may not be visible with current max rings setting.
         </div>
       )}
-      <div>
+      
+      {/* Display key levels at the top */}
+      <div className="key-levels-summary" style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        padding: '10px', 
+        background: '#f8f9fa', 
+        borderRadius: '4px',
+        marginBottom: '15px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+      }}>
+        <div>
+          <span style={{ fontWeight: 'bold', color: '#28a745', marginRight: '8px' }}>Up Levels:</span>
+          <span>{upLevelsDisplay || 'None found'}</span>
+        </div>
+        <div>
+          <span style={{ fontWeight: 'bold', color: '#dc3545', marginRight: '8px' }}>Down Levels:</span>
+          <span>{downLevelsDisplay || 'None found'}</span>
+        </div>
+      </div>
+      
+      <div 
+        ref={canvasContainerRef}
+        style={{ 
+          width: '90%', 
+          margin: '0 auto', 
+          overflow: 'hidden',
+          position: 'relative',
+          cursor: isPanning ? 'grabbing' : 'grab'
+        }}
+      >
         <canvas
           ref={canvasRef}
           width={canvasWidth}
           height={canvasHeight}
           style={{ 
-            margin: '10px', 
             border: '1px solid #ccc',
             display: 'block',
             background: '#fff'
@@ -702,29 +786,13 @@ const GannSquareChart = ({ targetNumber = 81, sunPosition = 71, maxRings = 4, ce
         />
       </div>
       
-      <div className="chart-legend" style={{ padding: '10px', marginTop: '10px' }}>
-        <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <span style={{ width: '15px', height: '15px', backgroundColor: 'rgba(100, 200, 100, 0.5)', borderRadius: '3px', display: 'inline-block', marginRight: '5px' }}></span>
-            <span>Center (1)</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <span style={{ width: '15px', height: '15px', backgroundColor: 'rgba(255, 215, 0, 0.6)', borderRadius: '50%', display: 'inline-block', marginRight: '5px' }}></span>
-            <span>Sun Position ({validSunPosition})</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <span style={{ width: '15px', height: '15px', backgroundColor: 'rgba(255, 165, 0, 0.6)', borderRadius: '3px', display: 'inline-block', marginRight: '5px' }}></span>
-            <span>Target Number ({targetNumber})</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <span style={{ width: '15px', height: '15px', backgroundColor: 'rgba(0, 200, 0, 0.4)', borderRadius: '3px', display: 'inline-block', marginRight: '5px' }}></span>
-            <span>Up Levels</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <span style={{ width: '15px', height: '15px', backgroundColor: 'rgba(255, 0, 0, 0.4)', borderRadius: '3px', display: 'inline-block', marginRight: '5px' }}></span>
-            <span>Down Levels</span>
-          </div>
-        </div>
+      <div className="chart-info" style={{ 
+        textAlign: 'center', 
+        marginTop: '10px', 
+        fontSize: '14px', 
+        color: '#666' 
+      }}>
+        Drag to pan the chart
       </div>
     </div>
   );

@@ -96,7 +96,6 @@ https://www.tradingview.com/charting-library-docs/latest/api/modules/Charting_Li
 https://www.tradingview.com/charting-library-docs/latest/api/modules/Datafeed
 
 **enumerations**
-
 https://www.tradingview.com/charting-library-docs/latest/api/enums/Charting_Library.ActionId
 https://www.tradingview.com/charting-library-docs/latest/api/enums/Broker.BottomWidgetBarMode
 https://www.tradingview.com/charting-library-docs/latest/api/enums/Charting_Library.BottomWidgetBarMode

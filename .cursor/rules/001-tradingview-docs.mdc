@@ -1,0 +1,43 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+ ---
+# Rule Definition for Prioritizing Scraped TradingView Documentation
+
+name: Prioritize Scraped TradingView Docs
+version: "1.0"
+# Apply this rule generally across the project
+globs:
+  - "*"
+# Trigger on file changes or manual requests
+triggers:
+  - file_change
+  - manual
+---
+
+# AI Instructions for TradingView Tasks
+
+## Primary Goal
+
+When working on tasks (feature implementation, bug fixes, refactoring, code generation, answering questions) involving the **TradingView Advanced Charts library**, your primary source of information and context **must** be the locally scraped documentation within this project.
+
+## Documentation Location
+
+The relevant documentation is located in the `scraped_docs/` directory. Pay special attention to the index and the individual section files within:
+
+*   Reference the main index: `@scraped_docs/index.md`
+*   Consult the entire directory contents: `@scraped_docs/`
+
+## Why This is Important
+
+This directory contains documentation scraped directly from the official TradingView Charting Library website, tailored to the version and context potentially relevant to this project. Relying on this local documentation ensures accuracy and adherence to the specific APIs, configurations, and examples relevant here, potentially overriding more general knowledge you might possess.
+
+## How to Use
+
+1.  **Prioritize:** Before generating code or answering questions about TradingView functionality, *always* check the `@scraped_docs/` content first.
+2.  **Verify:** If unsure about a specific function, parameter, configuration option, or enum related to TradingView, consult the relevant `.md` file within `@scraped_docs/`.
+3.  **Reference:** When providing code examples or explanations, explicitly mention if the information was derived from the local `@scraped_docs/` content.
+
+Do not rely solely on your general training data for TradingView library specifics; the local `@scraped_docs/` files are the authoritative source for this project.
