@@ -11,7 +11,7 @@ from datetime import datetime
 import time
 
 from .ephemeris import get_current_sun_angle, calculate_sun_position
-from .market_data import get_current_price, get_prices_for_tickers
+from .market_data import get_current_price, get_prices_for_tickers, get_price_on_date
 from .gann_square import calculate_gann_levels
 
 # Import firestore but don't require it to work
@@ -27,32 +27,47 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def calculate_levels_for_ticker(ticker: str, num_levels: int = 5) -> Optional[Dict[str, Any]]:
+def calculate_levels_for_ticker(ticker: str, num_levels: int = 5, date: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Calculate Gann Square of 9 levels for a ticker.
-    
+
     Args:
         ticker: The ticker symbol
         num_levels: Number of levels to calculate in each direction
-        
+        date: Optional date string (YYYY-MM-DD). If provided, uses that date's
+              closing price and the sun's position on that date instead of
+              the live price and current sun position.
+
     Returns:
         dict: Dictionary with calculated levels and metadata
     """
-    logger.info(f"Starting calculate_levels_for_ticker for {ticker}")
+    logger.info(f"Starting calculate_levels_for_ticker for {ticker}, date={date}")
     try:
-        # Get the current price using the updated method
-        logger.info(f"Getting current price for {ticker}")
-        price = get_current_price(ticker)
+        target_date = None
+        if date:
+            try:
+                target_date = datetime.strptime(date, "%Y-%m-%d")
+            except ValueError:
+                logger.error(f"Invalid date format: {date}, expected YYYY-MM-DD")
+                return None
+
+        # Get the price - historical for a given date, or live otherwise
+        if target_date is not None:
+            logger.info(f"Getting price for {ticker} on {date}")
+            price = get_price_on_date(ticker, target_date)
+        else:
+            logger.info(f"Getting current price for {ticker}")
+            price = get_current_price(ticker)
         logger.info(f"Retrieved price for {ticker}: {price}")
-        
+
         if price is None:
             logger.error(f"Failed to get price for {ticker}")
             return None
-        
-        # Get the current sun position
+
+        # Get the sun position - for the given date, or current
         logger.info(f"Calculating sun position")
         try:
-            sun_position = calculate_sun_position()
+            sun_position = calculate_sun_position(target_date)
             sun_angle = sun_position["angle"]
             logger.info(f"Sun position calculated: angle={sun_angle}")
         except Exception as e:
@@ -76,6 +91,7 @@ def calculate_levels_for_ticker(ticker: str, num_levels: int = 5) -> Optional[Di
         result = {
             "symbol": ticker,
             "price": price,
+            "price_date": target_date.strftime("%Y-%m-%d") if target_date else None,
             "sun_angle": sun_angle,
             "sun_position": sun_position,
             "up_levels": levels["up_levels"],

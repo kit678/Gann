@@ -180,18 +180,19 @@ async def delete_ticker(ticker: str = Path(..., description="The ticker symbol t
 @router.get("/levels/{ticker}", response_model=Dict[str, Any])
 async def get_levels_for_ticker(
     ticker: str = Path(..., description="The ticker symbol"),
-    recalculate: bool = Query(False, description="Whether to recalculate the levels")
+    recalculate: bool = Query(False, description="Whether to recalculate the levels"),
+    date: Optional[str] = Query(None, description="Optional date (YYYY-MM-DD) to price the ticker as-of. Defaults to the live price.")
 ):
     """Get Gann Square of 9 levels for a ticker."""
     try:
         ticker = ticker.upper()
-        
+
         # Implement more robust handling with retries
         max_retries = 3
         retry_delay = 2  # seconds
-        
-        # First check if we have stored levels and don't need to recalculate
-        if not recalculate and firestore_available:
+
+        # The stored-levels cache only applies to "current" (no date) lookups
+        if not recalculate and not date and firestore_available:
             try:
                 levels = get_gann_levels(ticker)
                 if levels is not None:
@@ -199,13 +200,13 @@ async def get_levels_for_ticker(
             except Exception as e:
                 logger.warning(f"Error retrieving stored levels: {str(e)}")
                 # Continue to calculation if retrieval fails
-        
+
         # Try multiple times with increasing delays
         for attempt in range(max_retries):
             try:
                 # Try to calculate levels
-                levels = calculate_levels_for_ticker(ticker)
-                
+                levels = calculate_levels_for_ticker(ticker, date=date)
+
                 if levels is not None:
                     return levels
                 

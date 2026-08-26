@@ -2,8 +2,6 @@ import React from 'react';
 import Head from 'next/head';
 import Navbar from './Navbar';
 import Footer from './Footer';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 
 const Layout = ({ children, title = 'GannSq9 - Trading Levels Calculator' }) => {
   return (
@@ -20,17 +18,6 @@ const Layout = ({ children, title = 'GannSq9 - Trading Levels Calculator' }) => 
           {children}
         </main>
         <Footer />
-        <ToastContainer
-          position="bottom-right"
-          autoClose={5000}
-          hideProgressBar={false}
-          newestOnTop
-          closeOnClick
-          rtl={false}
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-        />
       </div>
 
       <style jsx>{`

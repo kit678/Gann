@@ -243,11 +243,11 @@ export const removeTicker = async (ticker) => {
 };
 
 // Gann Levels
-export const getLevelsForTicker = async (ticker, recalculate = false) => {
+export const getLevelsForTicker = async (ticker, { recalculate = false, date = null } = {}) => {
   try {
-    const response = await api.get(`/api/levels/${ticker}`, {
-      params: { recalculate },
-    });
+    const params = { recalculate };
+    if (date) params.date = date;
+    const response = await api.get(`/api/levels/${ticker}`, { params });
     return response.data;
   } catch (error) {
     console.error(`Error fetching levels for ${ticker}:`, error);

@@ -27,67 +27,73 @@ class GannSquare:
             size: The size of the square matrix (default: 60)
         """
         self.size = size
-        self.matrix = self._generate_square()
+        self.matrix, self.value_to_position = self._generate_square()
         self.cardinal_angles = [0, 45, 90, 135, 180, 225, 270, 315]
-        
-    def _generate_square(self) -> np.ndarray:
+
+    def _generate_square(self) -> Tuple[np.ndarray, Dict[int, Tuple[int, int]]]:
         """
         Generate the Gann Square of 9 matrix.
-        
+
+        Also builds a value -> (row, col) lookup table alongside the matrix,
+        so get_position() doesn't need to re-scan the whole matrix per call.
+
         Returns:
-            numpy.ndarray: The generated square matrix
+            tuple: (matrix, value_to_position lookup dict)
         """
         # Create a matrix of zeros
         square = np.zeros((self.size, self.size), dtype=int)
-        
+        value_to_position: Dict[int, Tuple[int, int]] = {}
+
         # Center of the square
         center_x, center_y = self.size // 2, self.size // 2
-        
+
         # Directions: right, up, left, down
         directions = [(1, 0), (0, 1), (-1, 0), (0, -1)]
-        
+
         # Starting position and value
         x, y = center_x, center_y
         square[y][x] = 1  # Center value is 1
-        
+        value_to_position[1] = (y, x)
+
         # Current value and direction index
         value = 2
         dir_idx = 0
-        
+
         # Steps to take in current direction
         steps = 1
-        
+
         # Number of times we've moved in the current step count
         step_count = 0
-        
+
         # Generate the spiral
         while value <= self.size * self.size:
             # Move in the current direction
             dx, dy = directions[dir_idx]
             x += dx
             y += dy
-            
+
             # Check if we're still within the matrix bounds
             if 0 <= x < self.size and 0 <= y < self.size:
                 square[y][x] = value
+                value_to_position[value] = (y, x)
                 value += 1
             else:
                 # If we're out of bounds, stop
                 break
-            
+
             # Increment step count
             step_count += 1
-            
+
             # Check if we need to change direction
             if step_count == steps:
                 dir_idx = (dir_idx + 1) % 4
                 step_count = 0
-                
+
                 # After moving East or West, increase the step count
                 if dir_idx == 0 or dir_idx == 2:
                     steps += 1
-        
-        return square
+
+        return square, value_to_position
     
     def find_nearest_value(self, value: float) -> int:
         """
@@ -111,22 +117,14 @@ class GannSquare:
     def get_position(self, value: int) -> Tuple[int, int]:
         """
         Find the position (row, col) of a value in the Gann Square.
-        
+
         Args:
             value: The value to find
-            
+
         Returns:
-            tuple: (row, col) position in the square
+            tuple: (row, col) position in the square, or None if not present
         """
-        # Find the position of the value in the matrix
-        positions = np.where(self.matrix == value)
-        
-        # If the value is not in the matrix, return None
-        if len(positions[0]) == 0:
-            return None
-        
-        # Return the position (row, col)
-        return positions[0][0], positions[1][0]
+        return self.value_to_position.get(value)
     
     def get_angle(self, value: int) -> float:
         """

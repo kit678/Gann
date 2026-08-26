@@ -73,6 +73,44 @@ def get_current_price(ticker: str) -> Optional[float]:
                 logger.error(f"All retries failed for {ticker}")
                 return None
 
+def get_price_on_date(ticker: str, date: datetime) -> Optional[float]:
+    """
+    Get the closing price for a ticker on a specific calendar date.
+
+    If the market was closed on that date (weekend/holiday), returns the
+    most recent prior trading day's close within a 7-day lookback window.
+
+    Args:
+        ticker: The ticker symbol
+        date: The date to fetch the closing price for
+
+    Returns:
+        float: The closing price, or None if no data is available
+    """
+    try:
+        stock = yf.Ticker(ticker)
+        start = date - timedelta(days=7)
+        end = date + timedelta(days=1)
+        data = stock.history(start=start.strftime('%Y-%m-%d'), end=end.strftime('%Y-%m-%d'))
+
+        if data.empty:
+            logger.warning(f"No data returned for {ticker} around {date.strftime('%Y-%m-%d')}")
+            return None
+
+        # data.index is tz-aware; compare dates only
+        data = data[data.index.date <= date.date()]
+        if data.empty:
+            logger.warning(f"No trading data on or before {date.strftime('%Y-%m-%d')} for {ticker}")
+            return None
+
+        price = data['Close'].iloc[-1]
+        logger.info(f"Price for {ticker} on/before {date.strftime('%Y-%m-%d')}: ${price}")
+        return float(price)
+
+    except Exception as e:
+        logger.error(f"Error fetching price for {ticker} on {date.strftime('%Y-%m-%d')}: {str(e)}")
+        return None
+
 def get_prices_for_tickers(tickers: List[str]) -> Dict[str, Optional[float]]:
     """
     Get prices for multiple tickers.

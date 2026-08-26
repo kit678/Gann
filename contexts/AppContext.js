@@ -1,7 +1,21 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { getAllTickers, getSunPosition } from '../utils/api';
 
-const AppContext = createContext();
+// Default shape so consumers always receive a usable object. Without this,
+// `createContext()` defaults to `undefined` and any `const { x } = useAppContext()`
+// throws and takes down the whole render tree.
+const defaultContextValue = {
+  tickers: [],
+  sunPosition: null,
+  loading: true,
+  error: null,
+  lastUpdated: null,
+  addTickerToList: () => {},
+  removeTickerFromList: () => {},
+  refreshData: () => {},
+};
+
+const AppContext = createContext(defaultContextValue);
 
 export const AppProvider = ({ children }) => {
   const [tickers, setTickers] = useState([]);
@@ -23,7 +37,7 @@ export const AppProvider = ({ children }) => {
       // Fetch sun position
       const sunData = await getSunPosition();
       setSunPosition(sunData);
-      
+
       setLastUpdated(new Date());
     } catch (err) {
       console.error('Error fetching data:', err);
