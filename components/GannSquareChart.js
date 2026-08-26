@@ -48,7 +48,7 @@ function drawSunGlyph(ctx, cx, cy, cellSize, zoom) {
 }
 
 /** Draw a crescent by punching an offset disc out of a full disc. */
-function drawMoonGlyph(ctx, cx, cy, cellSize) {
+function drawMoonGlyph(ctx, cx, cy, cellSize, zoom) {
   const radius = cellSize * 0.24;
   ctx.save();
   ctx.beginPath();
@@ -56,7 +56,7 @@ function drawMoonGlyph(ctx, cx, cy, cellSize) {
   ctx.fillStyle = 'rgba(245, 247, 252, 0.95)';
   ctx.fill();
   ctx.strokeStyle = 'rgba(120, 130, 150, 0.9)';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1 / zoom;
   ctx.stroke();
 
   // Cut the crescent using the square's own background colour.
@@ -91,14 +91,17 @@ const GannSquareChart = ({
   const isConjunct = moonDegree !== null && moonDegree === sunDegree;
 
   // Build one grid per visible body. The spiral itself is identical; only the
-  // recorded body position differs, so levels differ.
+  // recorded body position differs, so levels differ. Skipped entirely while
+  // hidden - nothing downstream (overlay, legend, or the page's level
+  // summary) reads Moon data when showMoon is off, so there's no reason to
+  // rebuild a possibly-large spiral matrix for it.
   const sunGrid = useMemo(
     () => buildGannSquare(targetNumber, sunDegree),
     [targetNumber, sunDegree]
   );
   const moonGrid = useMemo(
-    () => (moonDegree === null ? null : buildGannSquare(targetNumber, moonDegree)),
-    [targetNumber, moonDegree]
+    () => (!showMoon || moonDegree === null ? null : buildGannSquare(targetNumber, moonDegree)),
+    [showMoon, targetNumber, moonDegree]
   );
 
   const sunLevels = useMemo(() => findLevels(sunGrid, 3), [sunGrid]);
@@ -322,7 +325,7 @@ const GannSquareChart = ({
         } else if (isMoonCell) {
           ctx.fillStyle = COLORS.moonCell;
           ctx.fillRect(x, y, cellSize, cellSize);
-          drawMoonGlyph(ctx, glyphX, glyphY, cellSize);
+          drawMoonGlyph(ctx, glyphX, glyphY, cellSize, view.zoom);
         }
 
         if (row === sunGrid.targetPosition.row && col === sunGrid.targetPosition.col) {
