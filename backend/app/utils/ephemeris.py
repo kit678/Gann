@@ -48,8 +48,9 @@ def calculate_sun_position(date: datetime.datetime = None) -> Dict[str, Any]:
     Calculate the position of the sun in the tropical zodiac.
     
     Args:
-        date: The date for calculation (default: current date and time)
-        
+        date: UTC instant to calculate for (default: now). A naive datetime
+              is interpreted as UTC, not local time - see _to_utc().
+
     Returns:
         dict: Contains the sun's position data
     """
@@ -108,14 +109,16 @@ def calculate_sun_position_for_date(
     """
     Calculate the position of the sun for a specific date and time.
     
+    All arguments are UTC, not local/wall-clock time - see _to_utc().
+
     Args:
         year: The year
         month: The month (1-12)
         day: The day (1-31)
-        hour: The hour (0-23)
+        hour: The hour (0-23), UTC
         minute: The minute (0-59)
         second: The second (0-59)
-        
+
     Returns:
         dict: Contains the sun's position data
     """
