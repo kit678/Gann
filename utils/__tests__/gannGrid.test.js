@@ -32,4 +32,12 @@ describe('gannGrid regression against pre-extraction behaviour', () => {
     expect(grid.dimension % 2).toBe(1);
     expect(grid.matrix.length).toBe(grid.dimension);
   });
+
+  test('refuses a grid above MAX_CELLS rather than freezing the tab', () => {
+    const grid = buildGannSquare(10000000, 71);
+    expect(grid.tooLarge).toBe(true);
+    expect(grid.matrix).toEqual([]);
+    expect(grid.targetFound).toBe(false);
+    expect(grid.bodyFound).toBe(false);
+  });
 });

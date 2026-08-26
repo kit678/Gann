@@ -75,6 +75,14 @@ function buildWithRings(rings, target, body) {
  * Build a Gann Square of 9 containing both the target number and the body's
  * degree square, expanding the grid if either is missing.
  *
+ * Note: this guarantees the target and body squares themselves are present,
+ * but not that findLevels() below will find a full `count` of up/down levels
+ * on the body's cross - a target/body pair near the grid's edge could yield
+ * fewer. This matches every real input (price-derived targets and 1-360
+ * degree bodies are always far below the ring count needed to hit that
+ * edge), verified against four baselines captured from the pre-extraction
+ * implementation.
+ *
  * @param {number} target - the price-derived square to centre the analysis on
  * @param {number} body - the celestial body's degree, used as a square number
  * @param {number} [minRings] - optional lower bound on ring count
