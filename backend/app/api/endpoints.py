@@ -273,18 +273,33 @@ async def delete_ticker(ticker: str = Path(..., description="The ticker symbol t
 async def get_levels_for_ticker(
     ticker: str = Path(..., description="The ticker symbol"),
     recalculate: bool = Query(False, description="Whether to recalculate the levels"),
-    date: Optional[str] = Query(None, description="Optional date (YYYY-MM-DD) to price the ticker as-of. Defaults to the live price.")
+    date: Optional[str] = Query(None, description="Optional date (YYYY-MM-DD) to price the ticker as-of. Defaults to the live price."),
+    datetime_et: Optional[str] = Query(
+        None,
+        alias="datetime",
+        description="Optional 'YYYY-MM-DDTHH:mm' in US Eastern. Overrides `date`.",
+    ),
 ):
     """Get Gann Square of 9 levels for a ticker."""
     try:
         ticker = ticker.upper()
+
+        # Resolve the requested instant. `datetime` wins; `date` means 16:00 ET.
+        when = None
+        try:
+            if datetime_et:
+                when = parse_et_datetime(datetime_et)
+            elif date:
+                when = parse_et_datetime(f"{date}T16:00")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
         # Implement more robust handling with retries
         max_retries = 3
         retry_delay = 2  # seconds
 
         # The stored-levels cache only applies to "current" (no date) lookups
-        if not recalculate and not date and firestore_available:
+        if not recalculate and when is None and firestore_available:
             try:
                 levels = get_gann_levels(ticker)
                 if levels is not None:
@@ -297,7 +312,7 @@ async def get_levels_for_ticker(
         for attempt in range(max_retries):
             try:
                 # Try to calculate levels
-                levels = calculate_levels_for_ticker(ticker, date=date)
+                levels = calculate_levels_for_ticker(ticker, when=when)
 
                 if levels is not None:
                     return levels

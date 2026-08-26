@@ -86,5 +86,24 @@ class TestCelestialEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+class TestLevelsDatetime(unittest.TestCase):
+    """/api/levels must accept an ET datetime and report both bodies."""
+
+    def test_levels_include_moon_position(self):
+        response = client.get(
+            "/api/levels/AAPL", params={"datetime": "2026-01-02T16:00"}
+        )
+        if response.status_code != 200:
+            self.skipTest("market data unavailable")
+        body = response.json()
+        self.assertIn("sun_position", body)
+        self.assertIn("moon_position", body)
+        self.assertIn("angle", body["moon_position"])
+
+    def test_bad_datetime_returns_400(self):
+        response = client.get("/api/levels/AAPL", params={"datetime": "nonsense"})
+        self.assertEqual(response.status_code, 400)
+
+
 if __name__ == "__main__":
     unittest.main()

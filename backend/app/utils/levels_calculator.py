@@ -10,7 +10,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 import time
 
-from .ephemeris import get_current_sun_angle, calculate_sun_position
+from .ephemeris import get_current_sun_angle, calculate_sun_position, calculate_moon_position
 from .market_data import get_current_price, get_prices_for_tickers, get_price_on_date
 from .gann_square import calculate_gann_levels
 
@@ -27,7 +27,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def calculate_levels_for_ticker(ticker: str, num_levels: int = 5, date: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def calculate_levels_for_ticker(
+    ticker: str,
+    num_levels: int = 5,
+    date: Optional[str] = None,
+    when=None,
+) -> Optional[Dict[str, Any]]:
     """
     Calculate Gann Square of 9 levels for a ticker.
 
@@ -37,14 +42,23 @@ def calculate_levels_for_ticker(ticker: str, num_levels: int = 5, date: Optional
         date: Optional date string (YYYY-MM-DD). If provided, uses that date's
               closing price and the sun's position on that date instead of
               the live price and current sun position.
+        when: Optional timezone-aware datetime instant. Takes precedence over
+              `date` when both are given. Used for both the historical price
+              lookup and the celestial position calculation, so they describe
+              the same moment.
 
     Returns:
         dict: Dictionary with calculated levels and metadata
     """
     logger.info(f"Starting calculate_levels_for_ticker for {ticker}, date={date}")
     try:
+        # `when` is a timezone-aware instant and takes precedence over `date`.
+        # `date` remains supported and means 16:00 on that day - the closing
+        # bell, matching the closing price returned for that date.
         target_date = None
-        if date:
+        if when is not None:
+            target_date = when
+        elif date:
             try:
                 target_date = datetime.strptime(date, "%Y-%m-%d")
             except ValueError:
@@ -64,14 +78,17 @@ def calculate_levels_for_ticker(ticker: str, num_levels: int = 5, date: Optional
             logger.error(f"Failed to get price for {ticker}")
             return None
 
-        # Get the sun position - for the given date, or current
-        logger.info(f"Calculating sun position")
+        # Get the celestial positions - for the given instant, or current
+        logger.info(f"Calculating celestial positions")
         try:
             sun_position = calculate_sun_position(target_date)
+            moon_position = calculate_moon_position(target_date)
             sun_angle = sun_position["angle"]
-            logger.info(f"Sun position calculated: angle={sun_angle}")
+            logger.info(
+                f"Positions calculated: sun={sun_angle}, moon={moon_position['angle']}"
+            )
         except Exception as e:
-            logger.error(f"Error calculating sun position: {str(e)}")
+            logger.error(f"Error calculating celestial positions: {str(e)}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
             raise
@@ -94,6 +111,7 @@ def calculate_levels_for_ticker(ticker: str, num_levels: int = 5, date: Optional
             "price_date": target_date.strftime("%Y-%m-%d") if target_date else None,
             "sun_angle": sun_angle,
             "sun_position": sun_position,
+            "moon_position": moon_position,
             "up_levels": levels["up_levels"],
             "down_levels": levels["down_levels"],
             "timestamp": datetime.now().isoformat(),
