@@ -10,14 +10,20 @@ from typing import List, Dict, Any, Optional
 import logging
 import asyncio
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from ..utils.market_data import (
-    get_current_price, 
-    get_prices_for_tickers, 
+    get_current_price,
+    get_prices_for_tickers,
     get_historical_data,
     get_daily_prices
 )
-from ..utils.ephemeris import get_current_sun_angle, calculate_sun_position
+from ..utils.ephemeris import (
+    get_current_sun_angle,
+    calculate_sun_position,
+    calculate_moon_position,
+)
 from ..utils.levels_calculator import (
     calculate_levels_for_ticker,
     calculate_levels_for_tickers,
@@ -83,6 +89,68 @@ class LevelsResponse(BaseModel):
 
 
 # API endpoints
+EASTERN = ZoneInfo("America/New_York")
+UTC = ZoneInfo("UTC")
+
+
+def parse_et_datetime(value: str) -> datetime:
+    """
+    Parse a 'YYYY-MM-DDTHH:mm' string as US Eastern time.
+
+    Eastern is used because it is the session the closing prices belong to.
+    An explicit offset is rejected rather than silently reinterpreted, so a
+    caller can never believe they sent one timezone and get another.
+
+    Args:
+        value: datetime string with no offset suffix
+
+    Returns:
+        A timezone-aware datetime in US Eastern.
+
+    Raises:
+        ValueError: if the string is malformed or carries an offset.
+    """
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        raise ValueError(
+            f"Invalid datetime '{value}'. Expected format YYYY-MM-DDTHH:mm."
+        )
+
+    if parsed.tzinfo is not None:
+        raise ValueError(
+            "Do not supply a UTC offset. Times are always interpreted as US Eastern."
+        )
+
+    return parsed.replace(tzinfo=EASTERN)
+
+
+@router.get("/celestial")
+async def get_celestial_positions(
+    datetime_et: Optional[str] = Query(
+        None,
+        alias="datetime",
+        description="Optional 'YYYY-MM-DDTHH:mm' in US Eastern. Defaults to now.",
+    )
+):
+    """Get Sun and Moon positions for an instant, defaulting to now."""
+    try:
+        when = parse_et_datetime(datetime_et) if datetime_et else datetime.now(EASTERN)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        return {
+            "datetime_et": when.strftime("%Y-%m-%d %H:%M:%S"),
+            "datetime_utc": when.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "sun": calculate_sun_position(when),
+            "moon": calculate_moon_position(when),
+        }
+    except Exception as e:
+        logger.error(f"Error computing celestial positions: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/sun", response_model=SunPositionResponse)
 async def get_sun_position():
     """Get the current position of the sun in the tropical zodiac."""
