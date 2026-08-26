@@ -22,6 +22,22 @@ describe('fitView', () => {
     expect(huge.zoom).toBeGreaterThanOrEqual(MIN_ZOOM);
     expect(huge.zoom).toBeLessThanOrEqual(MAX_ZOOM);
   });
+
+  test('does not error on a zero-dimension grid', () => {
+    const view = fitView(0, CELL, 800, 600);
+    expect(view.zoom).toBeGreaterThan(0);
+    expect(Number.isFinite(view.panX)).toBe(true);
+    expect(Number.isFinite(view.panY)).toBe(true);
+  });
+
+  test('picks the constraining axis on a non-square viewport', () => {
+    // A tall narrow viewport: width is the tighter constraint.
+    const view = fitView(10, CELL, 200, 2000);
+    const gridPx = 10 * CELL;
+    expect(view.zoom * gridPx).toBeLessThanOrEqual(200);
+    // Height has slack - the grid should not fill it edge-to-edge.
+    expect(view.zoom * gridPx).toBeLessThan(2000);
+  });
 });
 
 describe('zoomAt', () => {
@@ -46,6 +62,20 @@ describe('zoomAt', () => {
   test('clamps at the minimum', () => {
     const view = zoomAt({ zoom: MIN_ZOOM, panX: 0, panY: 0 }, 0, 0, 0.01);
     expect(view.zoom).toBe(MIN_ZOOM);
+  });
+
+  test('zooming out keeps the world point under the cursor fixed', () => {
+    const before = { zoom: 2, panX: 50, panY: 50 };
+    const cursorX = 300;
+    const cursorY = 200;
+    const worldX = (cursorX - before.panX) / before.zoom;
+    const worldY = (cursorY - before.panY) / before.zoom;
+
+    const after = zoomAt(before, cursorX, cursorY, 0.5);
+
+    expect(after.zoom).toBeCloseTo(1, 5);
+    expect(worldX * after.zoom + after.panX).toBeCloseTo(cursorX, 5);
+    expect(worldY * after.zoom + after.panY).toBeCloseTo(cursorY, 5);
   });
 });
 
@@ -73,5 +103,12 @@ describe('visibleCellRange', () => {
     expect(range.colStart).toBe(0);
     expect(range.rowEnd).toBe(19);
     expect(range.colEnd).toBe(19);
+  });
+
+  test('returns an unambiguously empty range for a zero-dimension grid', () => {
+    const view = { zoom: 1, panX: 0, panY: 0 };
+    const range = visibleCellRange(view, CELL, 0, 800, 600);
+    expect(range.colEnd).toBeLessThan(range.colStart);
+    expect(range.rowEnd).toBeLessThan(range.rowStart);
   });
 });

@@ -10,7 +10,11 @@
 export const MIN_ZOOM = 0.05;
 export const MAX_ZOOM = 4;
 
-/** Fraction of the viewport the grid occupies when fitted, leaving a margin. */
+/**
+ * Fraction of the viewport the grid occupies when fitted. Less than 1 so the
+ * outermost grid lines and cell numbers aren't clipped flush against the
+ * canvas edge.
+ */
 const FIT_MARGIN = 0.95;
 
 function clampZoom(zoom) {
@@ -74,7 +78,10 @@ export function zoomAt(view, screenX, screenY, factor) {
  */
 export function visibleCellRange(view, cellSize, dimension, viewportWidth, viewportHeight) {
   const scaledCell = cellSize * view.zoom;
-  if (scaledCell <= 0) {
+  if (scaledCell <= 0 || dimension <= 0) {
+    // Empty range, signalled unambiguously (colEnd/rowEnd < start) so a
+    // `for (i = start; i <= end; i++)` loop correctly iterates zero times
+    // rather than reading a stale/negative index.
     return { rowStart: 0, rowEnd: -1, colStart: 0, colEnd: -1 };
   }
 
