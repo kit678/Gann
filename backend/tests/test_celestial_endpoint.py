@@ -32,6 +32,21 @@ class TestParseEtDatetime(unittest.TestCase):
         winter = parse_et_datetime("2026-01-15T16:00").utcoffset()
         self.assertNotEqual(summer, winter)
 
+    def test_dst_spring_forward_gap_is_rejected(self):
+        """2026-03-08 02:30 ET never happens - clocks jump 2:00 to 3:00."""
+        with self.assertRaises(ValueError):
+            parse_et_datetime("2026-03-08T02:30")
+
+    def test_dst_fall_back_fold_is_rejected(self):
+        """2026-11-01 01:30 ET happens twice - clocks fall back 2:00 to 1:00."""
+        with self.assertRaises(ValueError):
+            parse_et_datetime("2026-11-01T01:30")
+
+    def test_time_just_after_fall_back_is_unambiguous_and_accepted(self):
+        """03:00 ET only ever happens once, even on the fall-back day."""
+        result = parse_et_datetime("2026-11-01T03:00")
+        self.assertEqual(result.astimezone(timezone.utc).hour, 8)
+
     def test_explicit_offset_is_rejected(self):
         with self.assertRaises(ValueError):
             parse_et_datetime("2026-07-15T16:00+05:30")

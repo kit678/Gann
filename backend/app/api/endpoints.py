@@ -99,7 +99,16 @@ def parse_et_datetime(value: str) -> datetime:
 
     Eastern is used because it is the session the closing prices belong to.
     An explicit offset is rejected rather than silently reinterpreted, so a
-    caller can never believe they sent one timezone and get another.
+    caller can never believe they sent one timezone and get another. The two
+    DST transition edge cases get the same treatment for the same reason:
+    - "Spring forward" gap (e.g. 2026-03-08 02:30): this wall-clock time never
+      happens, so tagging it with a timezone would silently invent an instant
+      that doesn't exist.
+    - "Fall back" fold (e.g. 2026-11-01 01:30): this wall-clock time happens
+      twice (once EDT, once EST, an hour apart), so tagging it would silently
+      pick one and discard the other. A silent hour of drift here moves the
+      Moon by roughly half a degree - the same class of bug the ephemeris
+      UTC fix addressed.
 
     Args:
         value: datetime string with no offset suffix
@@ -108,7 +117,8 @@ def parse_et_datetime(value: str) -> datetime:
         A timezone-aware datetime in US Eastern.
 
     Raises:
-        ValueError: if the string is malformed or carries an offset.
+        ValueError: if the string is malformed, carries an offset, or falls
+                    in a DST gap or fold.
     """
     try:
         parsed = datetime.fromisoformat(value)
@@ -122,7 +132,21 @@ def parse_et_datetime(value: str) -> datetime:
             "Do not supply a UTC offset. Times are always interpreted as US Eastern."
         )
 
-    return parsed.replace(tzinfo=EASTERN)
+    aware = parsed.replace(tzinfo=EASTERN)
+    roundtrip = aware.astimezone(UTC).astimezone(EASTERN).replace(tzinfo=None)
+    if roundtrip != parsed:
+        raise ValueError(
+            f"'{value}' does not exist - it falls in the DST spring-forward gap "
+            f"when US Eastern clocks skip ahead."
+        )
+
+    if EASTERN.utcoffset(parsed.replace(fold=0)) != EASTERN.utcoffset(parsed.replace(fold=1)):
+        raise ValueError(
+            f"'{value}' is ambiguous - it occurs twice due to the DST fall-back "
+            f"transition. Pick a time outside that one-hour window."
+        )
+
+    return aware
 
 
 @router.get("/celestial")
@@ -135,7 +159,7 @@ async def get_celestial_positions(
 ):
     """Get Sun and Moon positions for an instant, defaulting to now."""
     try:
-        when = parse_et_datetime(datetime_et) if datetime_et else datetime.now(EASTERN)
+        when = parse_et_datetime(datetime_et) if datetime_et is not None else datetime.now(EASTERN)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
