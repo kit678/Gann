@@ -3,25 +3,31 @@ import Layout from '../components/Layout';
 import GannSquareChart from '../components/GannSquareChart';
 import { getLevelsForTicker } from '../utils/api';
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+/** Local wall-clock 'YYYY-MM-DDTHH:mm', used as the max for the picker. */
+const nowLocalInput = () => {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 
 const GannChartTest = () => {
   const [ticker, setTicker] = useState('AAPL');
   const [tickerInput, setTickerInput] = useState('AAPL');
-  const [selectedDate, setSelectedDate] = useState(''); // '' = live price, else 'YYYY-MM-DD'
+  const [selectedDateTime, setSelectedDateTime] = useState(''); // '' = live
   const [levelsData, setLevelsData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [cellSize, setCellSize] = useState(40);
   const [highlightSpokes, setHighlightSpokes] = useState(true);
+  const [showSun, setShowSun] = useState(true);
+  const [showMoon, setShowMoon] = useState(true);
+  const [chartLevels, setChartLevels] = useState(null);
 
-  const fetchLevels = useCallback(async (tickerSymbol, date) => {
+  const fetchLevels = useCallback(async (tickerSymbol, datetime) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getLevelsForTicker(tickerSymbol, { date: date || null });
-      // Guard against malformed/unexpected response shapes (e.g. the shared
-      // API client's offline mock fallback, which has a different shape).
+      const data = await getLevelsForTicker(tickerSymbol, { datetime: datetime || null });
       if (!data || typeof data.price !== 'number' || typeof data.sun_angle !== 'number') {
         throw new Error('Unexpected response from levels API');
       }
@@ -30,17 +36,16 @@ const GannChartTest = () => {
       setLevelsData(null);
       setError(
         err?.response?.data?.detail ||
-        `Could not fetch price for ${tickerSymbol}${date ? ` on ${date}` : ''}.`
+        `Could not fetch price for ${tickerSymbol}${datetime ? ` at ${datetime}` : ''}.`
       );
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Fetch whenever the confirmed ticker or date changes
   useEffect(() => {
-    fetchLevels(ticker, selectedDate);
-  }, [ticker, selectedDate, fetchLevels]);
+    fetchLevels(ticker, selectedDateTime);
+  }, [ticker, selectedDateTime, fetchLevels]);
 
   const handleTickerSubmit = (e) => {
     e.preventDefault();
@@ -48,10 +53,13 @@ const GannChartTest = () => {
     if (cleaned) setTicker(cleaned);
   };
 
-  // Price -> integer grid target. Multiplying by 10 preserves one decimal
-  // of price precision when mapping into the Gann Square's integer spiral.
+  // Price -> integer grid square. The x10 preserves one decimal of price.
   const targetNumber = levelsData ? Math.round(levelsData.price * 10) : 810;
   const sunDegree = levelsData ? Math.round(levelsData.sun_angle) : 71;
+  const moonDegree =
+    levelsData && levelsData.moon_position
+      ? Math.round(levelsData.moon_position.angle)
+      : null;
 
   return (
     <Layout>
@@ -76,23 +84,25 @@ const GannChartTest = () => {
                 </form>
               </div>
 
-              <div className="col-md-3">
-                <label htmlFor="priceDate" className="form-label mb-1 d-block">Price Date:</label>
+              <div className="col-md-4">
+                <label htmlFor="priceDateTime" className="form-label mb-1 d-block">
+                  Date &amp; time <span className="text-muted">(ET)</span>:
+                </label>
                 <div className="d-flex align-items-center">
                   <input
-                    type="date"
-                    id="priceDate"
+                    type="datetime-local"
+                    id="priceDateTime"
                     className="form-control"
-                    value={selectedDate}
-                    max={todayStr()}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    style={{ maxWidth: '160px' }}
+                    value={selectedDateTime}
+                    max={nowLocalInput()}
+                    onChange={(e) => setSelectedDateTime(e.target.value)}
+                    style={{ maxWidth: '220px' }}
                   />
-                  {selectedDate && (
+                  {selectedDateTime && (
                     <button
                       type="button"
                       className="btn btn-outline-secondary btn-sm ms-2"
-                      onClick={() => setSelectedDate('')}
+                      onClick={() => setSelectedDateTime('')}
                     >
                       Use live
                     </button>
@@ -114,30 +124,35 @@ const GannChartTest = () => {
                 />
               </div>
 
-              <div className="col-md-2">
+              <div className="col-md-3">
                 <div className="form-check">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    id="highlightSpokes"
-                    checked={highlightSpokes}
-                    onChange={(e) => setHighlightSpokes(e.target.checked)}
-                  />
+                  <input className="form-check-input" type="checkbox" id="showSun"
+                         checked={showSun} onChange={(e) => setShowSun(e.target.checked)} />
+                  <label className="form-check-label" htmlFor="showSun">Show Sun</label>
+                </div>
+                <div className="form-check">
+                  <input className="form-check-input" type="checkbox" id="showMoon"
+                         checked={showMoon} onChange={(e) => setShowMoon(e.target.checked)} />
+                  <label className="form-check-label" htmlFor="showMoon">Show Moon</label>
+                </div>
+                <div className="form-check">
+                  <input className="form-check-input" type="checkbox" id="highlightSpokes"
+                         checked={highlightSpokes}
+                         onChange={(e) => setHighlightSpokes(e.target.checked)} />
                   <label className="form-check-label" htmlFor="highlightSpokes">
-                    Highlight Spokes
+                    Highlight Crosses
                   </label>
                 </div>
-              </div>
-
-              <div className="col-md-2">
-                <strong className="me-2">Target:</strong>
-                <span className="badge bg-primary">{targetNumber}</span>
               </div>
             </div>
 
             <div className="row mt-3">
-              <div className="col-md-8">
-                {loading && <span className="text-muted">Loading {ticker}{selectedDate ? ` for ${selectedDate}` : ''}...</span>}
+              <div className="col-12">
+                {loading && (
+                  <span className="text-muted">
+                    Loading {ticker}{selectedDateTime ? ` at ${selectedDateTime} ET` : ''}...
+                  </span>
+                )}
                 {!loading && error && <span className="text-danger">{error}</span>}
                 {!loading && !error && levelsData && (
                   <div className="d-flex flex-wrap align-items-center" style={{ gap: '1.5rem' }}>
@@ -151,24 +166,65 @@ const GannChartTest = () => {
                       </span>
                     </div>
                     <div>
-                      <strong className="me-2">Sun Position:</strong>
+                      <strong className="me-2">Sun:</strong>
                       <span className="badge bg-warning text-dark">{sunDegree}°</span>
                       <span className="ms-2 text-muted">
-                        ({levelsData.sun_position?.zodiac_sign || 'N/A'} {Number(levelsData.sun_position?.degrees_in_sign ?? 0).toFixed(2)}°)
+                        ({levelsData.sun_position?.zodiac_sign || 'N/A'}{' '}
+                        {Number(levelsData.sun_position?.degrees_in_sign ?? 0).toFixed(2)}°)
                       </span>
                     </div>
+                    {moonDegree !== null && (
+                      <div>
+                        <strong className="me-2">Moon:</strong>
+                        <span className="badge bg-secondary">{moonDegree}°</span>
+                        <span className="ms-2 text-muted">
+                          ({levelsData.moon_position?.zodiac_sign || 'N/A'}{' '}
+                          {Number(levelsData.moon_position?.degrees_in_sign ?? 0).toFixed(2)}°)
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
+
+            {chartLevels && (
+              <div className="row mt-3">
+                <div className="col-12">
+                  {chartLevels.isConjunct && showSun && showMoon ? (
+                    <div className="text-muted mb-1">
+                      Sun and Moon are conjunct — both bodies give the same levels.
+                    </div>
+                  ) : null}
+                  {showSun && (
+                    <div>
+                      <strong className="me-2">Sun levels —</strong>
+                      <span className="text-success me-3">Up: {chartLevels.sun.up.join(', ') || 'none'}</span>
+                      <span className="text-danger">Down: {chartLevels.sun.down.join(', ') || 'none'}</span>
+                    </div>
+                  )}
+                  {showMoon && chartLevels.moon.up.length > 0 && (
+                    <div>
+                      <strong className="me-2">Moon levels —</strong>
+                      <span className="text-success me-3">Up: {chartLevels.moon.up.join(', ')}</span>
+                      <span className="text-danger">Down: {chartLevels.moon.down.join(', ')}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         <GannSquareChart
           targetNumber={targetNumber}
           sunPosition={sunDegree}
+          moonPosition={moonDegree}
+          showSun={showSun}
+          showMoon={showMoon}
           cellSize={cellSize}
           highlightSpokes={highlightSpokes}
+          onLevelsChange={setChartLevels}
         />
       </div>
     </Layout>
