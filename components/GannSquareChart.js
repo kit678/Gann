@@ -1,801 +1,431 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { buildGannSquare, findLevels, normalizeBodyDegree, MAX_CELLS } from '../utils/gannGrid';
+import { fitView, zoomAt, visibleCellRange, MIN_ZOOM, MAX_ZOOM } from '../utils/gannView';
+
+const VIEWPORT_WIDTH = 900;
+const VIEWPORT_HEIGHT = 620;
+
+/** Below this on-screen cell size, numbers are illegible - skip drawing them. */
+const LABEL_MIN_CELL_PX = 14;
+
+const COLORS = {
+  grid: '#ddd',
+  text: '#333',
+  center: 'rgba(100, 200, 100, 0.5)',
+  oddSquare: 'rgba(100, 100, 200, 0.5)',
+  target: 'rgba(255, 165, 0, 0.6)',
+  targetBorder: 'rgba(255, 165, 0, 1)',
+  sunCell: 'rgba(255, 215, 0, 0.6)',
+  sunCross: 'rgba(0, 100, 255, 0.5)',
+  moonCell: 'rgba(200, 210, 224, 0.75)',
+  moonCross: 'rgba(160, 80, 220, 0.55)',
+  conjunctCell: 'rgba(214, 150, 90, 0.8)',
+  upFill: 'rgba(0, 200, 0, 0.4)',
+  downFill: 'rgba(255, 0, 0, 0.4)',
+  upRing: 'rgba(0, 160, 0, 0.95)',
+  downRing: 'rgba(210, 0, 0, 0.95)',
+};
+
+const cellKey = (row, col) => `${row},${col}`;
+
+/** Draw the Sun's rayed disc, centred in its square. */
+function drawSunGlyph(ctx, cx, cy, cellSize, zoom) {
+  const radius = cellSize * 0.22;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 200, 0, 0.9)';
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(230, 150, 0, 0.9)';
+  ctx.lineWidth = 1 / zoom;
+  for (let angle = 0; angle < 360; angle += 45) {
+    const rad = (angle * Math.PI) / 180;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(rad) * radius, cy + Math.sin(rad) * radius);
+    ctx.lineTo(cx + Math.cos(rad) * (radius * 1.5), cy + Math.sin(rad) * (radius * 1.5));
+    ctx.stroke();
+  }
+}
+
+/** Draw a crescent by punching an offset disc out of a full disc. */
+function drawMoonGlyph(ctx, cx, cy, cellSize) {
+  const radius = cellSize * 0.24;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(245, 247, 252, 0.95)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(120, 130, 150, 0.9)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Cut the crescent using the square's own background colour.
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.arc(cx + radius * 0.55, cy - radius * 0.2, radius * 0.85, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
 
 /**
- * GannSquareChart Component
- * 
- * Renders a visual representation of the Gann Square of 9 chart for a given ticker.
- * Shows the square/spiral pattern, sun position, and highlights relevant levels.
- * Highlights the target number with a special color.
- * 
- * @param {Object} props - Component props
- * @param {number} props.targetNumber - Target number to highlight on the chart
- * @param {number} props.sunPosition - Sun position (zodiac degree) to center blue axes on
- * @param {number} props.maxRings - Maximum number of rings to display
- * @param {number} props.cellSize - Size of each cell in pixels
- * @param {boolean} props.highlightSpokes - Whether to highlight cardinal spokes
+ * Renders the Gann Square of 9 with pan/zoom, and overlays the Sun's and
+ * Moon's crosses and their derived levels.
  */
-const GannSquareChart = ({ targetNumber = 81, sunPosition = 71, maxRings = 4, cellSize = 40, highlightSpokes = true }) => {
+const GannSquareChart = ({
+  targetNumber = 81,
+  sunPosition = 71,
+  moonPosition = null,
+  showSun = true,
+  showMoon = true,
+  cellSize = 40,
+  highlightSpokes = true,
+  onLevelsChange,
+}) => {
   const canvasRef = useRef(null);
-  const canvasContainerRef = useRef(null);
-  const [square, setSquare] = useState([]);
-  const [dimension, setDimension] = useState(0);
-  const [canvasHeight, setCanvasHeight] = useState(0);
-  const [canvasWidth, setCanvasWidth] = useState(0);
-  const [targetPosition, setTargetPosition] = useState({ row: -1, col: -1 });
-  const [sunPositionCoords, setSunPositionCoords] = useState({ row: -1, col: -1 });
-  const [targetFound, setTargetFound] = useState(true);
-  const [sunFound, setSunFound] = useState(true);
-  const [keyLevels, setKeyLevels] = useState({
-    up: [],
-    down: []
-  });
-  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [view, setView] = useState({ zoom: 1, panX: 0, panY: 0 });
   const [isPanning, setIsPanning] = useState(false);
-  const [startPanPosition, setStartPanPosition] = useState({ x: 0, y: 0 });
-  
-  // Ensure we have valid sun position
-  const validSunPosition = typeof sunPosition === 'number' && !isNaN(sunPosition) ? sunPosition : 71;
-  
-  // Build the Gann Square data
-  useEffect(() => {
-    console.log("Building Gann Square with targetNumber:", targetNumber, "and sunPosition:", validSunPosition);
-    
-    // We need to ensure we have enough rings to find all the key levels
-    // Let's add a buffer to maxRings to make sure we can find 3 levels in both directions
-    const initialMaxRings = Math.max(Math.ceil(Math.sqrt(targetNumber) / 2) + 3, maxRings);
-    
-    // Build a Gann Square with the ring-by-ring approach
-    function buildGannSquare(target, sun, initialMaxRings) {
-      // Ensure sun and target are valid numbers
-      target = parseInt(target) || 81;
-      sun = parseInt(sun) || 71;
-      
-      // Start with initial max rings, which may be increased if needed
-      let effectiveMaxRings = initialMaxRings;
-      
-      // Function to build the square with a given number of rings
-      function buildSquareWithRings(rings) {
-        // Determine dimension based on rings
-        const maxRingSize = 2 * rings + 1; // 1 center + rings*2
-        const dim = maxRingSize;
-        
-        // Create an empty 2D array (dim x dim)
-        const matrix = Array.from({ length: dim }, () => Array(dim).fill(null));
-        
-        // The center coordinates
-        const center = Math.floor((dim - 1) / 2);
-        let row = center;
-        let col = center;
-        
-        // Place '1' in the center
-        matrix[row][col] = 1;
-        
-        // Current value to place
-        let currentVal = 2;
-        let i = 1; // Ring counter
-        
-        // Track where our target number and sun position are placed
-        let targetRow = -1;
-        let targetCol = -1;
-        let sunRow = -1;
-        let sunCol = -1;
-        
-        if (target === 1) {
-          targetRow = row;
-          targetCol = col;
-        }
-        
-        if (sun === 1) {
-          sunRow = row;
-          sunCol = col;
-        }
-        
-        // Keep track of the sequence of positions for traversal
-        const positionSequence = [{ row: center, col: center, value: 1 }];
-        
-        // Helper function to move 'steps' in a direction, filling matrix with values
-        function moveSteps(direction, steps) {
-          for (let s = 0; s < steps; s++) {
-            if (currentVal > dim * dim) break;
-            
-            switch (direction) {
-              case 'left':  col--; break;
-              case 'up':    row--; break;
-              case 'right': col++; break;
-              case 'down':  row++; break;
-            }
-            
-            matrix[row][col] = currentVal;
-            
-            // Store this position in the sequence
-            positionSequence.push({ row, col, value: currentVal });
-            
-            // Check if this is our target number
-            if (currentVal === target) {
-              targetRow = row;
-              targetCol = col;
-            }
-            
-            // Check if this is our sun position
-            if (currentVal === sun) {
-              sunRow = row;
-              sunCol = col;
-            }
-            
-            currentVal++;
-          }
-        }
-        
-        // Keep adding rings until we've placed all numbers up to dim^2
-        // or reached maxRings
-        while (currentVal <= dim * dim && i <= rings) {
-          // For ring i, do:
-          //  1 step left
-          moveSteps('left', 1);
-          if (currentVal > dim * dim) break;
-          
-          //  (2i - 1) steps up
-          moveSteps('up', 2*i - 1);
-          if (currentVal > dim * dim) break;
-          
-          //  (2i) steps right
-          moveSteps('right', 2*i);
-          if (currentVal > dim * dim) break;
-          
-          //  (2i) steps down
-          moveSteps('down', 2*i);
-          if (currentVal > dim * dim) break;
-          
-          //  (2i) steps left
-          moveSteps('left', 2*i);
-          if (currentVal > dim * dim) break;
-          
-          i++;
-        }
-        
-        return { 
-          matrix, 
-          dimension: dim, 
-          targetPosition: { row: targetRow, col: targetCol },
-          sunPosition: { row: sunRow, col: sunCol },
-          positionSequence
-        };
-      }
-      
-      // First, build the square with initial rings
-      let result = buildSquareWithRings(effectiveMaxRings);
-      let { matrix, dimension, targetPosition, sunPosition, positionSequence } = result;
-      
-      // Check if target and sun are found
-      const isTargetFound = targetPosition.row !== -1 && targetPosition.col !== -1;
-      const isSunFound = sunPosition.row !== -1 && sunPosition.col !== -1;
-      
-      // If either the target or sun is not found, we might need more rings
-      if (!isTargetFound || !isSunFound) {
-        const maxNeeded = Math.max(target, sun);
-        const neededRings = Math.ceil(Math.sqrt(maxNeeded) / 2);
-        
-        if (neededRings > effectiveMaxRings) {
-          effectiveMaxRings = neededRings;
-          result = buildSquareWithRings(effectiveMaxRings);
-          matrix = result.matrix;
-          dimension = result.dimension;
-          targetPosition = result.targetPosition;
-          sunPosition = result.sunPosition;
-          positionSequence = result.positionSequence;
-        }
-      }
-      
-      // Find up and down levels only if both target and sun are found
-      const upLevels = [];
-      const downLevels = [];
-      
-      if (isTargetFound && isSunFound) {
-        // Find the index of the target in the position sequence
-        const targetIndex = positionSequence.findIndex(
-          pos => pos.row === targetPosition.row && pos.col === targetPosition.col
-        );
-        
-        if (targetIndex !== -1) {
-          // Function to check if a position is on a blue axis (aligned with sun)
-          function isOnBlueAxis(row, col) {
-            const sunRow = sunPosition.row;
-            const sunCol = sunPosition.col;
-            
-            // Check if on same row (horizontal)
-            if (row === sunRow) return true;
-            
-            // Check if on same column (vertical)
-            if (col === sunCol) return true;
-            
-            // Check if on diagonal (top-left to bottom-right)
-            if (row - sunRow === col - sunCol) return true;
-            
-            // Check if on diagonal (top-right to bottom-left)
-            if (row - sunRow === -(col - sunCol)) return true;
-            
-            return false;
-          }
-          
-          // Forward traversal for up levels
-          let upLevelCount = 0;
-          let upIndex = targetIndex + 1;
-          
-          while (upLevelCount < 3 && upIndex < positionSequence.length) {
-            const pos = positionSequence[upIndex];
-            
-            if (isOnBlueAxis(pos.row, pos.col)) {
-              upLevels.push({
-                row: pos.row,
-                col: pos.col,
-                value: pos.value
-              });
-              upLevelCount++;
-            }
-            
-            upIndex++;
-          }
-          
-          // If we didn't find enough up levels, we might need to extend the spiral
-          if (upLevelCount < 3) {
-            // Extend the spiral and rebuild
-            effectiveMaxRings += 3; // Add more rings
-            result = buildSquareWithRings(effectiveMaxRings);
-            
-            // Update variables with new result
-            matrix = result.matrix;
-            dimension = result.dimension;
-            targetPosition = result.targetPosition;
-            sunPosition = result.sunPosition;
-            positionSequence = result.positionSequence;
-            
-            // Find the target index again in the new sequence
-            const newTargetIndex = positionSequence.findIndex(
-              pos => pos.row === targetPosition.row && pos.col === targetPosition.col
-            );
-            
-            // Clear previously found levels and try again
-            upLevels.length = 0;
-            upLevelCount = 0;
-            upIndex = newTargetIndex + 1;
-            
-            while (upLevelCount < 3 && upIndex < positionSequence.length) {
-              const pos = positionSequence[upIndex];
-              
-              if (isOnBlueAxis(pos.row, pos.col)) {
-                upLevels.push({
-                  row: pos.row,
-                  col: pos.col,
-                  value: pos.value
-                });
-                upLevelCount++;
-              }
-              
-              upIndex++;
-            }
-          }
-          
-          // Backward traversal for down levels
-          let downLevelCount = 0;
-          let downIndex = targetIndex - 1;
-          
-          while (downLevelCount < 3 && downIndex >= 0) {
-            const pos = positionSequence[downIndex];
-            
-            if (isOnBlueAxis(pos.row, pos.col)) {
-              downLevels.push({
-                row: pos.row,
-                col: pos.col,
-                value: pos.value
-              });
-              downLevelCount++;
-            }
-            
-            downIndex--;
-          }
-        }
-      }
-      
-      console.log("Up levels:", upLevels.map(l => l.value));
-      console.log("Down levels:", downLevels.map(l => l.value));
-      
-      return {
-        matrix,
-        dimension,
-        targetPosition,
-        sunPosition,
-        targetFound: isTargetFound,
-        sunFound: isSunFound,
-        keyLevels: {
-          up: upLevels,
-          down: downLevels
-        },
-        effectiveMaxRings
-      };
-    }
-    
-    const { 
-      matrix, 
-      dimension, 
-      targetPosition, 
-      sunPosition, 
-      targetFound, 
-      sunFound, 
-      keyLevels,
-      effectiveMaxRings 
-    } = buildGannSquare(targetNumber, validSunPosition, initialMaxRings);
-    
-    console.log("Built matrix with dimension:", dimension);
-    console.log("Target number position:", targetPosition);
-    console.log("Sun position coordinates:", sunPosition);
-    console.log("Target found:", targetFound);
-    console.log("Sun found:", sunFound);
-    console.log("Using effective max rings:", effectiveMaxRings);
-    console.log("Key levels:", keyLevels);
-    
-    setSquare(matrix);
-    setDimension(dimension);
-    setTargetPosition(targetPosition);
-    setSunPositionCoords(sunPosition);
-    setTargetFound(targetFound);
-    setSunFound(sunFound);
-    setKeyLevels(keyLevels);
-    
-    // Calculate canvas dimensions
-    const totalWidth = dimension * cellSize;
-    const totalHeight = dimension * cellSize + 60; // Add 60px for legend
-    setCanvasWidth(totalWidth);
-    setCanvasHeight(totalHeight);
-    
-    // Reset panning when data changes
-    setPanOffset({ x: 0, y: 0 });
-    
-  }, [targetNumber, validSunPosition, maxRings, cellSize]);
+  const panStart = useRef({ x: 0, y: 0 });
 
-  // Handle mouse events for panning
+  const sunDegree = normalizeBodyDegree(sunPosition);
+  const moonDegree = moonPosition == null ? null : normalizeBodyDegree(moonPosition);
+  const isConjunct = moonDegree !== null && moonDegree === sunDegree;
+
+  // Build one grid per visible body. The spiral itself is identical; only the
+  // recorded body position differs, so levels differ.
+  const sunGrid = useMemo(
+    () => buildGannSquare(targetNumber, sunDegree),
+    [targetNumber, sunDegree]
+  );
+  const moonGrid = useMemo(
+    () => (moonDegree === null ? null : buildGannSquare(targetNumber, moonDegree)),
+    [targetNumber, moonDegree]
+  );
+
+  const sunLevels = useMemo(() => findLevels(sunGrid, 3), [sunGrid]);
+  const moonLevels = useMemo(
+    () => (moonGrid ? findLevels(moonGrid, 3) : { up: [], down: [] }),
+    [moonGrid]
+  );
+
+  const tooLarge = sunGrid.tooLarge;
+  const dimension = sunGrid.dimension;
+
+  // Report levels upward so the page can render them outside the canvas.
+  useEffect(() => {
+    if (!onLevelsChange) return;
+    onLevelsChange({
+      sun: { up: sunLevels.up.map((l) => l.value), down: sunLevels.down.map((l) => l.value) },
+      moon: { up: moonLevels.up.map((l) => l.value), down: moonLevels.down.map((l) => l.value) },
+      isConjunct,
+    });
+  }, [sunLevels, moonLevels, isConjunct, onLevelsChange]);
+
+  // Fit only when the grid dimension changes. Recalculating levels (which the
+  // Moon triggers roughly every 1.8 hours) must not throw away the user's view.
+  useEffect(() => {
+    if (!dimension) return;
+    setView(fitView(dimension, cellSize, VIEWPORT_WIDTH, VIEWPORT_HEIGHT));
+  }, [dimension, cellSize]);
+
+  const handleFit = useCallback(() => {
+    if (!dimension) return;
+    setView(fitView(dimension, cellSize, VIEWPORT_WIDTH, VIEWPORT_HEIGHT));
+  }, [dimension, cellSize]);
+
+  const handleZoomButton = useCallback((factor) => {
+    setView((current) => zoomAt(current, VIEWPORT_WIDTH / 2, VIEWPORT_HEIGHT / 2, factor));
+  }, []);
+
+  // Wheel zoom is attached natively so it can be non-passive and preventDefault.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const onWheel = (e) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      setView((current) =>
+        zoomAt(current, e.clientX - rect.left, e.clientY - rect.top, factor)
+      );
+    };
+
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', onWheel);
+  }, []);
+
   const startPan = (e) => {
     setIsPanning(true);
-    setStartPanPosition({
-      x: e.clientX - panOffset.x,
-      y: e.clientY - panOffset.y
-    });
+    panStart.current = { x: e.clientX - view.panX, y: e.clientY - view.panY };
   };
-  
-  const doPan = (e) => {
-    if (isPanning) {
-      setPanOffset({
-        x: e.clientX - startPanPosition.x,
-        y: e.clientY - startPanPosition.y
-      });
-    }
-  };
-  
-  const endPan = () => {
-    setIsPanning(false);
-  };
-  
-  // Setup event listeners for panning
-  useEffect(() => {
-    const container = canvasContainerRef.current;
-    if (!container) return;
-    
-    container.addEventListener('mousedown', startPan);
-    window.addEventListener('mousemove', doPan);
-    window.addEventListener('mouseup', endPan);
-    
-    return () => {
-      container.removeEventListener('mousedown', startPan);
-      window.removeEventListener('mousemove', doPan);
-      window.removeEventListener('mouseup', endPan);
-    };
-  }, [isPanning, startPanPosition]);
 
-  // Draw the Gann Square on canvas
   useEffect(() => {
-    if (!canvasRef.current || square.length === 0) {
-      console.log("Canvas ref not available or square is empty");
-      return;
-    }
-    
+    if (!isPanning) return undefined;
+
+    let frame = null;
+    let latest = null;
+
+    const apply = () => {
+      frame = null;
+      if (!latest) return;
+      const { x, y } = latest;
+      setView((current) => ({
+        ...current,
+        panX: x - panStart.current.x,
+        panY: y - panStart.current.y,
+      }));
+    };
+
+    const onMove = (e) => {
+      latest = { x: e.clientX, y: e.clientY };
+      if (frame === null) frame = requestAnimationFrame(apply);
+    };
+    const onUp = () => setIsPanning(false);
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [isPanning]);
+
+  // Draw
+  useEffect(() => {
     const canvas = canvasRef.current;
+    if (!canvas || tooLarge || !dimension) return;
     const ctx = canvas.getContext('2d');
-    
-    if (!ctx) {
-      console.error("Could not get 2D context from canvas");
-      return;
-    }
-    
-    // Set canvas size
-    const size = dimension * cellSize;
-    canvas.width = size;
-    canvas.height = size + 60; // Add space for legend
-    
-    console.log("Canvas dimensions set to:", canvas.width, "x", canvas.height);
-    
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Apply panning transformation
+    if (!ctx) return;
+
+    const upSun = new Set(sunLevels.up.map((l) => cellKey(l.row, l.col)));
+    const downSun = new Set(sunLevels.down.map((l) => cellKey(l.row, l.col)));
+    const upMoon = new Set(moonLevels.up.map((l) => cellKey(l.row, l.col)));
+    const downMoon = new Set(moonLevels.down.map((l) => cellKey(l.row, l.col)));
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
     ctx.save();
-    ctx.translate(panOffset.x, panOffset.y);
-    
-    // Draw grid
-    ctx.strokeStyle = '#ddd';
-    ctx.lineWidth = 1;
-    
-    // Draw horizontal lines
-    for (let i = 0; i <= dimension; i++) {
+    ctx.translate(view.panX, view.panY);
+    ctx.scale(view.zoom, view.zoom);
+
+    const range = visibleCellRange(view, cellSize, dimension, VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
+    const scaledCell = cellSize * view.zoom;
+    const drawLabels = scaledCell >= LABEL_MIN_CELL_PX;
+    const gridPx = dimension * cellSize;
+
+    // Grid lines - only the visible ones
+    ctx.strokeStyle = COLORS.grid;
+    ctx.lineWidth = 1 / view.zoom;
+    for (let r = range.rowStart; r <= range.rowEnd + 1; r++) {
       ctx.beginPath();
-      ctx.moveTo(0, i * cellSize);
-      ctx.lineTo(size, i * cellSize);
+      ctx.moveTo(0, r * cellSize);
+      ctx.lineTo(gridPx, r * cellSize);
       ctx.stroke();
     }
-    
-    // Draw vertical lines
-    for (let i = 0; i <= dimension; i++) {
+    for (let c = range.colStart; c <= range.colEnd + 1; c++) {
       ctx.beginPath();
-      ctx.moveTo(i * cellSize, 0);
-      ctx.lineTo(i * cellSize, size);
+      ctx.moveTo(c * cellSize, 0);
+      ctx.lineTo(c * cellSize, gridPx);
       ctx.stroke();
     }
-    
-    // Find center and sun position coordinates for drawing axes
-    const centerX = Math.floor((dimension - 1) / 2) * cellSize + cellSize / 2;
-    const centerY = Math.floor((dimension - 1) / 2) * cellSize + cellSize / 2;
-    
-    const sunX = sunPositionCoords.row >= 0 && sunPositionCoords.col >= 0 ? 
-                 sunPositionCoords.col * cellSize + cellSize / 2 : 
-                 centerX;
-                 
-    const sunY = sunPositionCoords.row >= 0 && sunPositionCoords.col >= 0 ? 
-                 sunPositionCoords.row * cellSize + cellSize / 2 : 
-                 centerY;
-    
-    // Draw the original spokes if enabled (lighter shade now)
+
+    // Body crosses, drawn full-width across the grid
+    const drawCross = (position, color) => {
+      if (position.row < 0) return;
+      const cx = position.col * cellSize + cellSize / 2;
+      const cy = position.row * cellSize + cellSize / 2;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2 / view.zoom;
+
+      const lines = [
+        [0, cy, gridPx, cy],
+        [cx, 0, cx, gridPx],
+        [0, cy - cx, gridPx, cy - cx + gridPx],
+        [0, cy + cx, gridPx, cy + cx - gridPx],
+      ];
+      lines.forEach(([x1, y1, x2, y2]) => {
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      });
+    };
+
     if (highlightSpokes) {
-      ctx.strokeStyle = 'rgba(255, 0, 0, 0.15)'; // Very light red
-      ctx.lineWidth = 1.5;
-      
-      // Draw the 8 cardinal spokes
-      // Horizontal
-      ctx.beginPath();
-      ctx.moveTo(0, centerY);
-      ctx.lineTo(size, centerY);
-      ctx.stroke();
-      
-      // Vertical
-      ctx.beginPath();
-      ctx.moveTo(centerX, 0);
-      ctx.lineTo(centerX, size);
-      ctx.stroke();
-      
-      // Diagonal 1 (top-left to bottom-right)
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(size, size);
-      ctx.stroke();
-      
-      // Diagonal 2 (top-right to bottom-left)
-      ctx.beginPath();
-      ctx.moveTo(size, 0);
-      ctx.lineTo(0, size);
-      ctx.stroke();
-      
-      // Draw the blue spokes through sun position if found
-      if (sunPositionCoords.row >= 0 && sunPositionCoords.col >= 0) {
-        ctx.strokeStyle = 'rgba(0, 100, 255, 0.5)'; // Medium blue
-        ctx.lineWidth = 2;
-        
-        // Horizontal through sun
-        ctx.beginPath();
-        ctx.moveTo(0, sunY);
-        ctx.lineTo(size, sunY);
-        ctx.stroke();
-        
-        // Vertical through sun
-        ctx.beginPath();
-        ctx.moveTo(sunX, 0);
-        ctx.lineTo(sunX, size);
-        ctx.stroke();
-        
-        // Diagonal 1 (top-left to bottom-right) through sun
-        const diag1Slope = 1; // Slope is 1 for 45-degree line
-        const diag1Intercept = sunY - diag1Slope * sunX;
-        
-        ctx.beginPath();
-        ctx.moveTo(0, diag1Intercept);
-        ctx.lineTo(size, diag1Slope * size + diag1Intercept);
-        ctx.stroke();
-        
-        // Diagonal 2 (top-right to bottom-left) through sun
-        const diag2Slope = -1; // Slope is -1 for 135-degree line
-        const diag2Intercept = sunY - diag2Slope * sunX;
-        
-        ctx.beginPath();
-        ctx.moveTo(0, diag2Slope * 0 + diag2Intercept);
-        ctx.lineTo(size, diag2Slope * size + diag2Intercept);
-        ctx.stroke();
+      if (showSun && sunGrid.bodyFound) drawCross(sunGrid.bodyPosition, COLORS.sunCross);
+      if (showMoon && moonGrid && moonGrid.bodyFound) {
+        drawCross(moonGrid.bodyPosition, COLORS.moonCross);
       }
     }
-    
-    // Fill in numbers
-    ctx.fillStyle = '#333';
+
+    // Cells
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    
-    // Collect cells to highlight
-    const upKeyLevelCells = keyLevels.up.map(level => ({ row: level.row, col: level.col }));
-    const downKeyLevelCells = keyLevels.down.map(level => ({ row: level.row, col: level.col }));
-    
-    for (let row = 0; row < dimension; row++) {
-      for (let col = 0; col < dimension; col++) {
-        const value = square[row][col];
-        if (value !== null) {
-          // Center of cell
-          const x = col * cellSize + cellSize / 2;
-          const y = row * cellSize + cellSize / 2;
-          
-          // Highlight cells on original spokes (very light)
-          if (highlightSpokes) {
-            const centerRow = Math.floor((dimension - 1) / 2);
-            const centerCol = Math.floor((dimension - 1) / 2);
-            
-            // Check if on a cardinal spoke
-            const isOnVertical = col === centerCol;
-            const isOnHorizontal = row === centerRow;
-            const isOnDiagonal1 = row - centerRow === col - centerCol; // top-left to bottom-right
-            const isOnDiagonal2 = row - centerRow === -(col - centerCol); // top-right to bottom-left
-            
-            if (isOnVertical || isOnHorizontal || isOnDiagonal1 || isOnDiagonal2) {
-              ctx.fillStyle = 'rgba(255, 220, 220, 0.25)'; // Very light red background
-              ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
-              ctx.fillStyle = '#333'; // reset text color
-            }
-          }
-          
-          // Highlight 1 (center)
-          if (value === 1) {
-            ctx.fillStyle = 'rgba(100, 200, 100, 0.5)';
-            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
-            ctx.fillStyle = '#333';
-          }
-          
-          // Highlight the bottom-left corners (9, 25, 49, etc.)
-          const isPerfectSquare = Math.sqrt(value) % 1 === 0;
-          const isOddSquare = isPerfectSquare && Math.sqrt(value) % 2 === 1;
-          
-          if (isOddSquare) {
-            ctx.fillStyle = 'rgba(100, 100, 200, 0.5)';
-            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
-            ctx.fillStyle = '#333';
-          }
-          
-          // Highlight Sun position
-          if (row === sunPositionCoords.row && col === sunPositionCoords.col) {
-            ctx.fillStyle = 'rgba(255, 215, 0, 0.6)'; // Gold for sun
-            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
-            
-            // Draw sun symbol
-            ctx.beginPath();
-            ctx.arc(x, y, cellSize * 0.3, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
-            ctx.fill();
-            ctx.strokeStyle = 'rgba(255, 165, 0, 0.8)';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-            
-            // Draw sun rays
-            const rayLength = cellSize * 0.15;
-            for (let angle = 0; angle < 360; angle += 45) {
-              const radian = angle * Math.PI / 180;
-              const startX = x + Math.cos(radian) * cellSize * 0.3;
-              const startY = y + Math.sin(radian) * cellSize * 0.3;
-              const endX = x + Math.cos(radian) * (cellSize * 0.3 + rayLength);
-              const endY = y + Math.sin(radian) * (cellSize * 0.3 + rayLength);
-              
-              ctx.beginPath();
-              ctx.moveTo(startX, startY);
-              ctx.lineTo(endX, endY);
-              ctx.strokeStyle = 'rgba(255, 165, 0, 0.8)';
-              ctx.stroke();
-            }
-            
-            ctx.fillStyle = '#333'; // reset text color
-          }
-          
-          // Highlight target number
-          if (row === targetPosition.row && col === targetPosition.col) {
-            ctx.fillStyle = 'rgba(255, 165, 0, 0.6)'; // orange for target number
-            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
-            ctx.fillStyle = '#333';
-            
-            // Draw a border around the target number
-            ctx.strokeStyle = 'rgba(255, 165, 0, 1)';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(col * cellSize, row * cellSize, cellSize, cellSize);
-          }
-          
-          // Highlight up key levels (next three after target)
-          const isUpKeyLevel = upKeyLevelCells.some(cell => cell.row === row && cell.col === col);
-          if (isUpKeyLevel) {
-            ctx.fillStyle = 'rgba(0, 200, 0, 0.4)'; // Green for up levels
-            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
-            ctx.fillStyle = '#333';
-            
-            // Draw a border around the up level
-            ctx.strokeStyle = 'rgba(0, 200, 0, 0.8)';
-            ctx.lineWidth = 1.5;
-            ctx.strokeRect(col * cellSize, row * cellSize, cellSize, cellSize);
-          }
-          
-          // Highlight down key levels (previous three before target)
-          const isDownKeyLevel = downKeyLevelCells.some(cell => cell.row === row && cell.col === col);
-          if (isDownKeyLevel) {
-            ctx.fillStyle = 'rgba(255, 0, 0, 0.4)'; // Red for down levels
-            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
-            ctx.fillStyle = '#333';
-            
-            // Draw a border around the down level
-            ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
-            ctx.lineWidth = 1.5;
-            ctx.strokeRect(col * cellSize, row * cellSize, cellSize, cellSize);
-          }
-          
-          // Draw the number
-          ctx.font = `${Math.max(12, cellSize * 0.4)}px Arial`;
-          ctx.fillText(value.toString(), x, y);
+    ctx.font = `${Math.max(10, cellSize * 0.4)}px Arial`;
+
+    for (let row = range.rowStart; row <= range.rowEnd; row++) {
+      for (let col = range.colStart; col <= range.colEnd; col++) {
+        const value = sunGrid.matrix[row][col];
+        if (value === null) continue;
+
+        const x = col * cellSize;
+        const y = row * cellSize;
+        const key = cellKey(row, col);
+
+        if (value === 1) {
+          ctx.fillStyle = COLORS.center;
+          ctx.fillRect(x, y, cellSize, cellSize);
+        }
+
+        const root = Math.sqrt(value);
+        if (root % 1 === 0 && root % 2 === 1) {
+          ctx.fillStyle = COLORS.oddSquare;
+          ctx.fillRect(x, y, cellSize, cellSize);
+        }
+
+        // Sun levels fill; Moon levels ring. A square that is both shows both.
+        if (showSun && upSun.has(key)) {
+          ctx.fillStyle = COLORS.upFill;
+          ctx.fillRect(x, y, cellSize, cellSize);
+        } else if (showSun && downSun.has(key)) {
+          ctx.fillStyle = COLORS.downFill;
+          ctx.fillRect(x, y, cellSize, cellSize);
+        }
+
+        if (showMoon && (upMoon.has(key) || downMoon.has(key))) {
+          ctx.strokeStyle = upMoon.has(key) ? COLORS.upRing : COLORS.downRing;
+          ctx.lineWidth = 3 / view.zoom;
+          ctx.strokeRect(x + 2, y + 2, cellSize - 4, cellSize - 4);
+        }
+
+        // Body squares
+        const isSunCell =
+          showSun && row === sunGrid.bodyPosition.row && col === sunGrid.bodyPosition.col;
+        const isMoonCell =
+          showMoon &&
+          moonGrid &&
+          row === moonGrid.bodyPosition.row &&
+          col === moonGrid.bodyPosition.col;
+
+        const glyphX = x + cellSize / 2;
+        const glyphY = y + cellSize / 2;
+
+        if (isSunCell && isMoonCell) {
+          ctx.fillStyle = COLORS.conjunctCell;
+          ctx.fillRect(x, y, cellSize, cellSize);
+          drawSunGlyph(ctx, glyphX, glyphY, cellSize, view.zoom);
+        } else if (isSunCell) {
+          ctx.fillStyle = COLORS.sunCell;
+          ctx.fillRect(x, y, cellSize, cellSize);
+          drawSunGlyph(ctx, glyphX, glyphY, cellSize, view.zoom);
+        } else if (isMoonCell) {
+          ctx.fillStyle = COLORS.moonCell;
+          ctx.fillRect(x, y, cellSize, cellSize);
+          drawMoonGlyph(ctx, glyphX, glyphY, cellSize);
+        }
+
+        if (row === sunGrid.targetPosition.row && col === sunGrid.targetPosition.col) {
+          ctx.fillStyle = COLORS.target;
+          ctx.fillRect(x, y, cellSize, cellSize);
+          ctx.strokeStyle = COLORS.targetBorder;
+          ctx.lineWidth = 2 / view.zoom;
+          ctx.strokeRect(x, y, cellSize, cellSize);
+        }
+
+        if (drawLabels) {
+          ctx.fillStyle = COLORS.text;
+          ctx.fillText(String(value), x + cellSize / 2, y + cellSize / 2);
         }
       }
     }
-    
-    // Restore the canvas context (removes panning transformation before drawing legend)
+
     ctx.restore();
-    
-    // Add a legend
-    ctx.fillStyle = '#333';
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'left';
-    ctx.fillText('Legend:', 10, size + 20);
-    
-    // Center square
-    ctx.fillStyle = 'rgba(100, 200, 100, 0.5)';
-    ctx.fillRect(80, size + 10, 15, 15);
-    ctx.fillStyle = '#333';
-    ctx.fillText('Center (1)', 100, size + 20);
-    
-    // Odd square corners
-    ctx.fillStyle = 'rgba(100, 100, 200, 0.5)';
-    ctx.fillRect(180, size + 10, 15, 15);
-    ctx.fillStyle = '#333';
-    ctx.fillText('Odd squares (9, 25, 49...)', 200, size + 20);
-    
-    // Sun position
-    ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
-    ctx.fillRect(380, size + 10, 15, 15);
-    ctx.fillStyle = '#333';
-    ctx.fillText(`Sun Position (${validSunPosition})`, 400, size + 20);
-    
-    // Target number
-    ctx.fillStyle = 'rgba(255, 165, 0, 0.6)';
-    ctx.fillRect(550, size + 10, 15, 15);
-    ctx.fillStyle = '#333';
-    ctx.fillText(`Target Number (${targetNumber})`, 570, size + 20);
-    
-    // Key levels
-    // Up levels
-    ctx.fillStyle = 'rgba(0, 200, 0, 0.4)';
-    ctx.fillRect(80, size + 35, 15, 15);
-    ctx.fillStyle = '#333';
-    ctx.fillText('Up Levels', 100, size + 45);
-    
-    // Down levels
-    ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
-    ctx.fillRect(180, size + 35, 15, 15);
-    ctx.fillStyle = '#333';
-    ctx.fillText('Down Levels', 200, size + 45);
-    
-    // Red spokes
-    if (highlightSpokes) {
-      ctx.fillStyle = 'rgba(255, 220, 220, 0.25)';
-      ctx.fillRect(330, size + 35, 15, 15);
-      ctx.fillStyle = '#333';
-      ctx.fillText('Original Axes (Center)', 350, size + 45);
-      
-      // Blue spokes
-      ctx.fillStyle = 'rgba(0, 100, 255, 0.3)';
-      ctx.fillRect(500, size + 35, 15, 15);
-      ctx.fillStyle = '#333';
-      ctx.fillText('Sun Axes', 520, size + 45);
-    }
-    
-    console.log("Canvas drawing complete");
-    
-  }, [square, dimension, cellSize, highlightSpokes, targetPosition, targetNumber, sunPositionCoords, validSunPosition, keyLevels, panOffset]);
-  
-  // Format key levels for display
-  const upLevelsDisplay = keyLevels.up.map(level => level.value).join(', ');
-  const downLevelsDisplay = keyLevels.down.map(level => level.value).join(', ');
-  
+  }, [
+    view, cellSize, dimension, tooLarge, highlightSpokes,
+    showSun, showMoon, sunGrid, moonGrid, sunLevels, moonLevels,
+  ]);
+
+  if (tooLarge) {
+    return (
+      <div className="alert alert-warning">
+        This price needs a grid larger than {MAX_CELLS.toLocaleString()} squares, which would
+        freeze the browser. Try an instrument priced under about $397,000.
+      </div>
+    );
+  }
+
+  const sunMissing = showSun && !sunGrid.bodyFound;
+  const moonMissing = showMoon && moonGrid !== null && !moonGrid.bodyFound;
+
   return (
-    <div className="gann-square-container">
-      {!targetFound && (
-        <div className="warning-message" style={{ 
-          color: '#d9534f', 
-          background: '#f9f2f2', 
-          padding: '10px', 
-          borderRadius: '4px',
-          marginBottom: '10px',
-          border: '1px solid #d9534f'
-        }}>
-          Target number {targetNumber} may not be visible with current max rings setting. 
-          Consider increasing target number to see it.
+    <div>
+      {(sunMissing || moonMissing) && (
+        <div className="alert alert-warning py-2">
+          {sunMissing && <div>Sun square not present in this grid — Sun overlay hidden.</div>}
+          {moonMissing && <div>Moon square not present in this grid — Moon overlay hidden.</div>}
         </div>
       )}
-      {!sunFound && (
-        <div className="warning-message" style={{ 
-          color: '#d9534f', 
-          background: '#f9f2f2', 
-          padding: '10px', 
-          borderRadius: '4px',
-          marginBottom: '10px',
-          border: '1px solid #d9534f'
-        }}>
-          Sun position {validSunPosition} may not be visible with current max rings setting.
-        </div>
-      )}
-      
-      {/* Display key levels at the top */}
-      <div className="key-levels-summary" style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        padding: '10px', 
-        background: '#f8f9fa', 
-        borderRadius: '4px',
-        marginBottom: '15px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-      }}>
-        <div>
-          <span style={{ fontWeight: 'bold', color: '#28a745', marginRight: '8px' }}>Up Levels:</span>
-          <span>{upLevelsDisplay || 'None found'}</span>
-        </div>
-        <div>
-          <span style={{ fontWeight: 'bold', color: '#dc3545', marginRight: '8px' }}>Down Levels:</span>
-          <span>{downLevelsDisplay || 'None found'}</span>
-        </div>
+
+      <div className="d-flex align-items-center mb-2" style={{ gap: '0.5rem' }}>
+        <button type="button" className="btn btn-sm btn-outline-secondary"
+                onClick={() => handleZoomButton(1 / 1.2)}>−</button>
+        <button type="button" className="btn btn-sm btn-outline-secondary"
+                onClick={() => handleZoomButton(1.2)}>+</button>
+        <button type="button" className="btn btn-sm btn-outline-primary"
+                onClick={handleFit}>Fit</button>
+        <span className="text-muted ms-2" style={{ fontSize: '0.85rem' }}>
+          {Math.round(view.zoom * 100)}% · scroll to zoom, drag to pan
+        </span>
       </div>
-      
-      <div 
-        ref={canvasContainerRef}
-        style={{ 
-          width: '90%', 
-          margin: '0 auto', 
-          overflow: 'hidden',
-          position: 'relative',
-          cursor: isPanning ? 'grabbing' : 'grab'
+
+      <canvas
+        ref={canvasRef}
+        width={VIEWPORT_WIDTH}
+        height={VIEWPORT_HEIGHT}
+        onMouseDown={startPan}
+        style={{
+          border: '1px solid #ccc',
+          background: '#fff',
+          display: 'block',
+          maxWidth: '100%',
+          cursor: isPanning ? 'grabbing' : 'grab',
         }}
-      >
-        <canvas
-          ref={canvasRef}
-          width={canvasWidth}
-          height={canvasHeight}
-          style={{ 
-            border: '1px solid #ccc',
-            display: 'block',
-            background: '#fff'
-          }}
-        />
-      </div>
-      
-      <div className="chart-info" style={{ 
-        textAlign: 'center', 
-        marginTop: '10px', 
-        fontSize: '14px', 
-        color: '#666' 
-      }}>
-        Drag to pan the chart
+      />
+
+      <div className="d-flex flex-wrap mt-2" style={{ gap: '1rem', fontSize: '0.85rem' }}>
+        <Swatch color={COLORS.center} label="Center (1)" />
+        <Swatch color={COLORS.oddSquare} label="Odd squares (9, 25, 49...)" />
+        <Swatch color={COLORS.target} label="Price square" />
+        {showSun && <Swatch color={COLORS.sunCell} label="Sun" />}
+        {showMoon && moonGrid && <Swatch color={COLORS.moonCell} label="Moon" />}
+        {isConjunct && showSun && showMoon && (
+          <Swatch color={COLORS.conjunctCell} label="Sun/Moon conjunct" />
+        )}
+        {showSun && <Swatch color={COLORS.upFill} label="Sun up levels (filled)" />}
+        {showSun && <Swatch color={COLORS.downFill} label="Sun down levels (filled)" />}
+        {showMoon && moonGrid && <Swatch color="transparent" border={COLORS.upRing}
+                                          label="Moon up levels (ring)" />}
+        {showMoon && moonGrid && <Swatch color="transparent" border={COLORS.downRing}
+                                          label="Moon down levels (ring)" />}
       </div>
     </div>
   );
 };
 
-export default GannSquareChart; 
+const Swatch = ({ color, border, label }) => (
+  <span className="d-inline-flex align-items-center" style={{ gap: '0.35rem' }}>
+    <span
+      style={{
+        width: 14,
+        height: 14,
+        background: color,
+        border: border ? `3px solid ${border}` : '1px solid #bbb',
+        display: 'inline-block',
+      }}
+    />
+    {label}
+  </span>
+);
+
+export default GannSquareChart;
