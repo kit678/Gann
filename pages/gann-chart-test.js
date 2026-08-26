@@ -3,11 +3,20 @@ import Layout from '../components/Layout';
 import GannSquareChart from '../components/GannSquareChart';
 import { getLevelsForTicker, getCelestial } from '../utils/api';
 
-/** Local wall-clock 'YYYY-MM-DDTHH:mm', used as the max for the picker. */
-const nowLocalInput = () => {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+/**
+ * Current wall-clock time in US Eastern, as 'YYYY-MM-DDTHH:mm'. Used as the
+ * max for the picker, which is itself labelled and interpreted as ET - using
+ * the browser's local zone here would wrongly block or allow times depending
+ * on where the user happens to be.
+ */
+const nowEasternInput = () => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(new Date());
+  const get = (type) => parts.find((p) => p.type === type).value;
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
 };
 
 const GannChartTest = () => {
@@ -145,7 +154,7 @@ const GannChartTest = () => {
                     id="priceDateTime"
                     className="form-control"
                     value={selectedDateTime}
-                    max={nowLocalInput()}
+                    max={nowEasternInput()}
                     onChange={(e) => setSelectedDateTime(e.target.value)}
                     style={{ maxWidth: '220px' }}
                   />

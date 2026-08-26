@@ -17,10 +17,18 @@ describe('fitView', () => {
     expect(view.panY).toBeCloseTo((600 - gridPx) / 2, 5);
   });
 
-  test('never returns a zoom outside the allowed range', () => {
+  test('never returns a zoom above the maximum', () => {
+    const tiny = fitView(1, CELL, 800, 600);
+    expect(tiny.zoom).toBeLessThanOrEqual(MAX_ZOOM);
+  });
+
+  test('fits a grid larger than MIN_ZOOM would normally allow', () => {
+    // A grid this large needs a zoom below MIN_ZOOM to fit at all - Fit must
+    // still frame it fully rather than clamping and letting it overflow.
     const huge = fitView(5000, CELL, 800, 600);
-    expect(huge.zoom).toBeGreaterThanOrEqual(MIN_ZOOM);
-    expect(huge.zoom).toBeLessThanOrEqual(MAX_ZOOM);
+    expect(huge.zoom).toBeLessThan(MIN_ZOOM);
+    const gridPx = 5000 * CELL;
+    expect(huge.zoom * gridPx).toBeLessThanOrEqual(600);
   });
 
   test('does not error on a zero-dimension grid', () => {

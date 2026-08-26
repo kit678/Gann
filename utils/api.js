@@ -23,14 +23,6 @@ const mockResponses = {
     },
     declination: 23.5 * Math.sin((new Date().getMonth() + 10) / 12 * Math.PI * 2)
   },
-  levels: {
-    levels: [
-      { price: 180.5, type: 'support', strength: 'strong' },
-      { price: 175.25, type: 'support', strength: 'medium' },
-      { price: 185.75, type: 'resistance', strength: 'medium' },
-      { price: 190.0, type: 'resistance', strength: 'strong' },
-    ]
-  },
   breaches: {
     breaches: []
   }

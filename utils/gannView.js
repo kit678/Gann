@@ -34,7 +34,11 @@ export function fitView(dimension, cellSize, viewportWidth, viewportHeight) {
   const gridPx = dimension * cellSize;
   if (gridPx <= 0) return { zoom: 1, panX: 0, panY: 0 };
 
-  const zoom = clampZoom(
+  // Only clamp the upper bound here - MIN_ZOOM is a floor for interactive
+  // zoom-out, not for framing. A grid larger than MIN_ZOOM can shrink to fit
+  // must still fit, or "Fit" stops doing what it says for large grids.
+  const zoom = Math.min(
+    MAX_ZOOM,
     Math.min(viewportWidth / gridPx, viewportHeight / gridPx) * FIT_MARGIN
   );
 
