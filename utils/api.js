@@ -53,10 +53,6 @@ api.interceptors.response.use(
       return Promise.resolve({ data: mockResponses.sun });
     }
     
-    if (url.includes('/api/levels')) {
-      return Promise.resolve({ data: mockResponses.levels });
-    }
-    
     if (url.includes('/api/breaches')) {
       return Promise.resolve({ data: mockResponses.breaches });
     }
@@ -242,11 +238,22 @@ export const removeTicker = async (ticker) => {
   }
 };
 
+// Celestial positions (Sun + Moon)
+export const getCelestial = async (datetimeEt = null) => {
+  const params = {};
+  if (datetimeEt) params.datetime = datetimeEt;
+  const response = await api.get('/api/celestial', { params });
+  return response.data;
+};
+
 // Gann Levels
-export const getLevelsForTicker = async (ticker, { recalculate = false, date = null } = {}) => {
+export const getLevelsForTicker = async (
+  ticker,
+  { recalculate = false, datetime = null } = {}
+) => {
   try {
     const params = { recalculate };
-    if (date) params.date = date;
+    if (datetime) params.datetime = datetime;
     const response = await api.get(`/api/levels/${ticker}`, { params });
     return response.data;
   } catch (error) {
