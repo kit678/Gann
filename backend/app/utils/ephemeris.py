@@ -43,10 +43,56 @@ def _to_utc(when: datetime.datetime = None) -> datetime.datetime:
     return when.astimezone(datetime.timezone.utc)
 
 
+def calculate_body_position(body: int, when: datetime.datetime = None) -> Dict[str, Any]:
+    """
+    Calculate a celestial body's position in the tropical zodiac.
+
+    Args:
+        body: A swisseph body constant, e.g. swe.SUN or swe.MOON
+        when: Timezone-aware datetime, naive (treated as UTC), or None for now
+
+    Returns:
+        dict: position data - angle, longitude, zodiac_sign, degrees_in_sign,
+              julian_day, date
+    """
+    initialize_ephemeris()
+
+    when = _to_utc(when)
+
+    jd = swe.julday(
+        when.year,
+        when.month,
+        when.day,
+        when.hour + when.minute / 60.0 + when.second / 3600.0
+    )
+
+    flags = swe.FLG_SWIEPH | swe.FLG_SPEED
+    result, _ = swe.calc_ut(jd, body, flags)
+
+    longitude = result[0] % 360
+    zodiac_index = int(longitude / 30)
+    degrees_in_sign = longitude % 30
+
+    zodiac_names = [
+        "Aries", "Taurus", "Gemini", "Cancer",
+        "Leo", "Virgo", "Libra", "Scorpio",
+        "Sagittarius", "Capricorn", "Aquarius", "Pisces"
+    ]
+
+    return {
+        "date": when.strftime("%Y-%m-%d %H:%M:%S"),
+        "julian_day": jd,
+        "longitude": longitude,
+        "zodiac_sign": zodiac_names[zodiac_index],
+        "degrees_in_sign": degrees_in_sign,
+        "angle": longitude,
+    }
+
+
 def calculate_sun_position(date: datetime.datetime = None) -> Dict[str, Any]:
     """
     Calculate the position of the sun in the tropical zodiac.
-    
+
     Args:
         date: UTC instant to calculate for (default: now). A naive datetime
               is interpreted as UTC, not local time - see _to_utc().
@@ -54,52 +100,21 @@ def calculate_sun_position(date: datetime.datetime = None) -> Dict[str, Any]:
     Returns:
         dict: Contains the sun's position data
     """
-    # Initialize the ephemeris if not already done
-    initialize_ephemeris()
-    
-    # Normalise to UTC - calc_ut() below expects Universal Time
-    date = _to_utc(date)
+    return calculate_body_position(swe.SUN, date)
 
-    # Convert date to Julian day
-    jd = swe.julday(
-        date.year,
-        date.month,
-        date.day,
-        date.hour + date.minute / 60.0 + date.second / 3600.0
-    )
-    
-    # Calculate the sun's position
-    flags = swe.FLG_SWIEPH | swe.FLG_SPEED
-    result, flags = swe.calc_ut(jd, swe.SUN, flags)
-    
-    # Extract the longitude (position in the zodiac)
-    longitude = result[0]
-    
-    # The result is in degrees (0-360)
-    # We'll normalize it to ensure it's in the range 0-360
-    longitude = longitude % 360
-    
-    # Get the zodiac sign (0-11, where 0 is Aries, 1 is Taurus, etc.)
-    zodiac_sign = int(longitude / 30)
-    
-    # Get the degrees within the zodiac sign
-    degrees_in_sign = longitude % 30
-    
-    # Define the zodiac sign names
-    zodiac_names = [
-        "Aries", "Taurus", "Gemini", "Cancer",
-        "Leo", "Virgo", "Libra", "Scorpio",
-        "Sagittarius", "Capricorn", "Aquarius", "Pisces"
-    ]
-    
-    return {
-        "date": date.strftime("%Y-%m-%d %H:%M:%S"),
-        "julian_day": jd,
-        "longitude": longitude,
-        "zodiac_sign": zodiac_names[zodiac_sign],
-        "degrees_in_sign": degrees_in_sign,
-        "angle": longitude  # This is the angle we need for Gann Square calculations
-    }
+
+def calculate_moon_position(when: datetime.datetime = None) -> Dict[str, Any]:
+    """
+    Calculate the position of the moon in the tropical zodiac.
+
+    Args:
+        when: UTC instant to calculate for (default: now). A naive datetime
+              is interpreted as UTC, not local time - see _to_utc().
+
+    Returns:
+        dict: Contains the moon's position data
+    """
+    return calculate_body_position(swe.MOON, when)
 
 
 def calculate_sun_position_for_date(

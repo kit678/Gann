@@ -36,5 +36,38 @@ class TestEphemerisUTC(unittest.TestCase):
         )
 
 
+from app.utils.ephemeris import calculate_body_position, calculate_moon_position
+import swisseph as swe
+
+
+class TestBodyPosition(unittest.TestCase):
+    """Both bodies must be computable from the same generalised helper."""
+
+    REFERENCE = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    EXPECTED_SUN = 281.07802
+    EXPECTED_MOON = 74.225405
+
+    def test_sun_via_generic_helper(self):
+        result = calculate_body_position(swe.SUN, self.REFERENCE)
+        self.assertAlmostEqual(result["angle"], self.EXPECTED_SUN, places=2)
+
+    def test_moon_via_generic_helper(self):
+        result = calculate_body_position(swe.MOON, self.REFERENCE)
+        self.assertAlmostEqual(result["angle"], self.EXPECTED_MOON, places=2)
+
+    def test_moon_convenience_wrapper(self):
+        result = calculate_moon_position(self.REFERENCE)
+        self.assertAlmostEqual(result["angle"], self.EXPECTED_MOON, places=2)
+
+    def test_moon_result_has_the_same_shape_as_sun(self):
+        moon = calculate_moon_position(self.REFERENCE)
+        for key in ("angle", "longitude", "zodiac_sign", "degrees_in_sign",
+                    "julian_day", "date"):
+            self.assertIn(key, moon)
+
+    def test_moon_zodiac_sign_is_correct_for_the_reference_instant(self):
+        self.assertEqual(calculate_moon_position(self.REFERENCE)["zodiac_sign"], "Gemini")
+
+
 if __name__ == "__main__":
     unittest.main()
