@@ -21,6 +21,28 @@ def initialize_ephemeris() -> None:
     swe.set_sid_mode(swe.SIDM_FAGAN_BRADLEY)
 
 
+def _to_utc(when: datetime.datetime = None) -> datetime.datetime:
+    """
+    Normalise a datetime to UTC for the ephemeris.
+
+    swisseph's calc_ut() expects Universal Time. Passing local time silently
+    shifts every body's position by the UTC offset.
+
+    Args:
+        when: Timezone-aware datetime, or naive (interpreted as UTC), or None
+              for the current instant.
+
+    Returns:
+        A timezone-aware datetime in UTC.
+    """
+    if when is None:
+        return datetime.datetime.now(datetime.timezone.utc)
+    if when.tzinfo is None:
+        # Naive input is interpreted as UTC by contract.
+        return when.replace(tzinfo=datetime.timezone.utc)
+    return when.astimezone(datetime.timezone.utc)
+
+
 def calculate_sun_position(date: datetime.datetime = None) -> Dict[str, Any]:
     """
     Calculate the position of the sun in the tropical zodiac.
@@ -34,10 +56,9 @@ def calculate_sun_position(date: datetime.datetime = None) -> Dict[str, Any]:
     # Initialize the ephemeris if not already done
     initialize_ephemeris()
     
-    # Use current date and time if not provided
-    if date is None:
-        date = datetime.datetime.now()
-    
+    # Normalise to UTC - calc_ut() below expects Universal Time
+    date = _to_utc(date)
+
     # Convert date to Julian day
     jd = swe.julday(
         date.year,
