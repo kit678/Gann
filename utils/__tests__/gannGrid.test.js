@@ -64,10 +64,35 @@ describe('normalizeBodyDegree', () => {
     expect(normalizeBodyDegree(undefined)).toBe(71);
     expect(normalizeBodyDegree(NaN)).toBe(71);
     expect(normalizeBodyDegree(null, 90)).toBe(90);
+    expect(normalizeBodyDegree(Infinity)).toBe(71);
+    expect(normalizeBodyDegree('180')).toBe(71);
+  });
+
+  test('wraps a negative degree into range', () => {
+    expect(normalizeBodyDegree(-10)).toBe(350);
   });
 
   test('wraps values at or beyond a full turn', () => {
     expect(normalizeBodyDegree(361)).toBe(1);
     expect(normalizeBodyDegree(720)).toBe(360);
+  });
+});
+
+describe('a second body produces its own levels', () => {
+  test('Moon at a different degree gives different levels from the Sun', () => {
+    const target = 3099;
+    const sun = findLevels(buildGannSquare(target, 152), 3);
+    const moon = findLevels(buildGannSquare(target, 310), 3);
+
+    expect(sun.up.map((l) => l.value)).toEqual([3115, 3144, 3166]);
+    expect(moon.up.length).toBe(3);
+    expect(moon.down.length).toBe(3);
+    expect(moon.up.map((l) => l.value)).not.toEqual(sun.up.map((l) => l.value));
+  });
+
+  test('the same degree for both bodies gives identical levels', () => {
+    const sun = findLevels(buildGannSquare(3099, 152), 3);
+    const moon = findLevels(buildGannSquare(3099, 152), 3);
+    expect(moon.up.map((l) => l.value)).toEqual(sun.up.map((l) => l.value));
   });
 });
