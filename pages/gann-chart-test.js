@@ -78,9 +78,12 @@ const GannChartTest = () => {
           const nextSun = Math.round(data.sun.angle);
           const nextMoon = Math.round(data.moon.angle);
           if (previous && previous.sunDegree === nextSun && previous.moonDegree === nextMoon) {
-            return previous; // No square change - avoid a pointless re-render.
+            return { ...previous, datetimeEt: data.datetime_et }; // Square unchanged, but the clock still ticks.
           }
-          return { sunDegree: nextSun, moonDegree: nextMoon, sun: data.sun, moon: data.moon };
+          return {
+            sunDegree: nextSun, moonDegree: nextMoon, sun: data.sun, moon: data.moon,
+            datetimeEt: data.datetime_et,
+          };
         });
       } catch (err) {
         // A dropped poll must not clear the chart. Keep the last known
@@ -121,11 +124,23 @@ const GannChartTest = () => {
   const sunDetail = livePositions ? livePositions.sun : levelsData?.sun_position;
   const moonDetail = livePositions ? livePositions.moon : levelsData?.moon_position;
 
+  // What instant the grid's Sun/Moon squares were actually computed from.
+  const gridDatetimeLabel = selectedDateTime
+    ? `${selectedDateTime.replace('T', ' ')} ET (historical)`
+    : livePositions?.datetimeEt
+      ? `${livePositions.datetimeEt} ET (live)`
+      : 'Loading current time…';
+
   return (
     <Layout>
       <div className="container mt-4">
         <div className="card mb-4">
           <div className="card-body">
+            <div className="mb-3">
+              <strong className="me-2">Grid reflects:</strong>
+              <span className="badge bg-info text-dark">{gridDatetimeLabel}</span>
+            </div>
+
             <div className="row align-items-end g-3">
               <div className="col-md-3">
                 <form onSubmit={handleTickerSubmit}>
