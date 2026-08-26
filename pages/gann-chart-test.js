@@ -203,11 +203,11 @@ const GannChartTest = () => {
                       <span className="text-danger">Down: {chartLevels.sun.down.join(', ') || 'none'}</span>
                     </div>
                   )}
-                  {showMoon && chartLevels.moon.up.length > 0 && (
+                  {showMoon && (chartLevels.moon.up.length > 0 || chartLevels.moon.down.length > 0) && (
                     <div>
                       <strong className="me-2">Moon levels —</strong>
-                      <span className="text-success me-3">Up: {chartLevels.moon.up.join(', ')}</span>
-                      <span className="text-danger">Down: {chartLevels.moon.down.join(', ')}</span>
+                      <span className="text-success me-3">Up: {chartLevels.moon.up.join(', ') || 'none'}</span>
+                      <span className="text-danger">Down: {chartLevels.moon.down.join(', ') || 'none'}</span>
                     </div>
                   )}
                 </div>
