@@ -30,7 +30,6 @@ logger = logging.getLogger(__name__)
 def calculate_levels_for_ticker(
     ticker: str,
     num_levels: int = 5,
-    date: Optional[str] = None,
     when=None,
 ) -> Optional[Dict[str, Any]]:
     """
@@ -39,35 +38,23 @@ def calculate_levels_for_ticker(
     Args:
         ticker: The ticker symbol
         num_levels: Number of levels to calculate in each direction
-        date: Optional date string (YYYY-MM-DD). If provided, uses that date's
-              closing price and the sun's position on that date instead of
-              the live price and current sun position.
-        when: Optional timezone-aware datetime instant. Takes precedence over
-              `date` when both are given. Used for both the historical price
-              lookup and the celestial position calculation, so they describe
-              the same moment.
+        when: Optional timezone-aware instant to price the ticker as-of. Used
+              for both the historical price lookup and the celestial position
+              calculation, so they describe the same moment. None means live.
+              Callers should resolve a plain calendar date to 16:00 ET (the
+              closing bell) before passing it here - see
+              endpoints.get_levels_for_ticker for that resolution.
 
     Returns:
         dict: Dictionary with calculated levels and metadata
     """
-    logger.info(f"Starting calculate_levels_for_ticker for {ticker}, date={date}")
+    logger.info(f"Starting calculate_levels_for_ticker for {ticker}, when={when}")
     try:
-        # `when` is a timezone-aware instant and takes precedence over `date`.
-        # `date` remains supported and means 16:00 on that day - the closing
-        # bell, matching the closing price returned for that date.
-        target_date = None
-        if when is not None:
-            target_date = when
-        elif date:
-            try:
-                target_date = datetime.strptime(date, "%Y-%m-%d")
-            except ValueError:
-                logger.error(f"Invalid date format: {date}, expected YYYY-MM-DD")
-                return None
+        target_date = when
 
-        # Get the price - historical for a given date, or live otherwise
+        # Get the price - historical for a given instant, or live otherwise
         if target_date is not None:
-            logger.info(f"Getting price for {ticker} on {date}")
+            logger.info(f"Getting price for {ticker} on {target_date}")
             price = get_price_on_date(ticker, target_date)
         else:
             logger.info(f"Getting current price for {ticker}")

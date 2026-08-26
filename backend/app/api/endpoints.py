@@ -273,7 +273,7 @@ async def delete_ticker(ticker: str = Path(..., description="The ticker symbol t
 async def get_levels_for_ticker(
     ticker: str = Path(..., description="The ticker symbol"),
     recalculate: bool = Query(False, description="Whether to recalculate the levels"),
-    date: Optional[str] = Query(None, description="Optional date (YYYY-MM-DD) to price the ticker as-of. Defaults to the live price."),
+    date: Optional[str] = Query(None, description="Optional date (YYYY-MM-DD), priced at 16:00 ET (market close). Defaults to the live price."),
     datetime_et: Optional[str] = Query(
         None,
         alias="datetime",

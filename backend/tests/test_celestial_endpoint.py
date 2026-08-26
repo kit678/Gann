@@ -104,6 +104,28 @@ class TestLevelsDatetime(unittest.TestCase):
         response = client.get("/api/levels/AAPL", params={"datetime": "nonsense"})
         self.assertEqual(response.status_code, 400)
 
+    def test_date_alone_resolves_to_16_00_et(self):
+        """?date=X must produce the same instant as ?datetime=XT16:00."""
+        via_date = client.get("/api/levels/AAPL", params={"date": "2026-01-02"})
+        via_datetime = client.get(
+            "/api/levels/AAPL", params={"datetime": "2026-01-02T16:00"}
+        )
+        if via_date.status_code != 200 or via_datetime.status_code != 200:
+            self.skipTest("market data unavailable")
+        self.assertEqual(
+            via_date.json()["sun_position"]["angle"],
+            via_datetime.json()["sun_position"]["angle"],
+        )
+
+    def test_datetime_takes_precedence_over_date_when_both_given(self):
+        response = client.get(
+            "/api/levels/AAPL",
+            params={"date": "2026-01-02", "datetime": "2026-01-03T09:00"},
+        )
+        if response.status_code != 200:
+            self.skipTest("market data unavailable")
+        self.assertEqual(response.json()["price_date"], "2026-01-03")
+
 
 if __name__ == "__main__":
     unittest.main()
