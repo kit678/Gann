@@ -1,4 +1,5 @@
 import { buildGannSquare, findLevels } from '../gannGrid';
+import { normalizeBodyDegree } from '../gannGrid';
 
 /**
  * Baselines captured from the running application before the extraction.
@@ -39,5 +40,34 @@ describe('gannGrid regression against pre-extraction behaviour', () => {
     expect(grid.matrix).toEqual([]);
     expect(grid.targetFound).toBe(false);
     expect(grid.bodyFound).toBe(false);
+  });
+});
+
+describe('normalizeBodyDegree', () => {
+  test('maps 0 degrees to square 360, not the fallback', () => {
+    expect(normalizeBodyDegree(0)).toBe(360);
+  });
+
+  test('maps a sub-degree value to 360 rather than 0', () => {
+    expect(normalizeBodyDegree(0.4)).toBe(360);
+  });
+
+  test('rounds 359.6 up to 360 and keeps it there', () => {
+    expect(normalizeBodyDegree(359.6)).toBe(360);
+  });
+
+  test('leaves an ordinary degree alone', () => {
+    expect(normalizeBodyDegree(152.3)).toBe(152);
+  });
+
+  test('falls back only when the value is genuinely missing', () => {
+    expect(normalizeBodyDegree(undefined)).toBe(71);
+    expect(normalizeBodyDegree(NaN)).toBe(71);
+    expect(normalizeBodyDegree(null, 90)).toBe(90);
+  });
+
+  test('wraps values at or beyond a full turn', () => {
+    expect(normalizeBodyDegree(361)).toBe(1);
+    expect(normalizeBodyDegree(720)).toBe(360);
   });
 });

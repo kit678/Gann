@@ -9,6 +9,23 @@
 export const MAX_CELLS = 4000000;
 
 /**
+ * Convert a raw body longitude into a valid square number in 1..360.
+ *
+ * The spiral has no square 0, and `deg || fallback` would silently turn a
+ * legitimate 0 degrees into the fallback. 0 and 360 are the same point on a
+ * circle, so 0 maps to 360, which is a real square.
+ *
+ * @param {number} degree - longitude in degrees
+ * @param {number} [fallback] - used only when degree is not a finite number
+ * @returns {number} an integer in 1..360
+ */
+export function normalizeBodyDegree(degree, fallback = 71) {
+  if (!Number.isFinite(degree)) return fallback;
+  const wrapped = ((Math.round(degree) % 360) + 360) % 360;
+  return wrapped === 0 ? 360 : wrapped;
+}
+
+/**
  * Number of spiral rings needed to contain a value, plus headroom.
  */
 function ringsFor(value) {
