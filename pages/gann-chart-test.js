@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import GannSquareChart from '../components/GannSquareChart';
-import { getLevelsForTicker } from '../utils/api';
+import { getLevelsForTicker, getCelestial } from '../utils/api';
 
 /** Local wall-clock 'YYYY-MM-DDTHH:mm', used as the max for the picker. */
 const nowLocalInput = () => {
@@ -22,6 +22,9 @@ const GannChartTest = () => {
   const [showSun, setShowSun] = useState(true);
   const [showMoon, setShowMoon] = useState(true);
   const [chartLevels, setChartLevels] = useState(null);
+
+  // Live-polled positions. Null means "use whatever came back with the price".
+  const [livePositions, setLivePositions] = useState(null);
 
   const fetchLevels = useCallback(async (tickerSymbol, datetime) => {
     setLoading(true);
@@ -47,6 +50,44 @@ const GannChartTest = () => {
     fetchLevels(ticker, selectedDateTime);
   }, [ticker, selectedDateTime, fetchLevels]);
 
+  // Poll the ephemeris in live mode only. This is a local calculation on the
+  // server, so it costs nothing and cannot be rate-limited - unlike the price
+  // feed, which is deliberately not polled.
+  useEffect(() => {
+    if (selectedDateTime) {
+      setLivePositions(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const tick = async () => {
+      try {
+        const data = await getCelestial();
+        if (cancelled) return;
+        setLivePositions((previous) => {
+          const nextSun = Math.round(data.sun.angle);
+          const nextMoon = Math.round(data.moon.angle);
+          if (previous && previous.sunDegree === nextSun && previous.moonDegree === nextMoon) {
+            return previous; // No square change - avoid a pointless re-render.
+          }
+          return { sunDegree: nextSun, moonDegree: nextMoon, sun: data.sun, moon: data.moon };
+        });
+      } catch (err) {
+        // A dropped poll must not clear the chart. Keep the last known
+        // positions and try again on the next tick.
+        console.warn('Celestial poll failed, keeping last known positions:', err.message);
+      }
+    };
+
+    tick();
+    const id = setInterval(tick, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [selectedDateTime]);
+
   const handleTickerSubmit = (e) => {
     e.preventDefault();
     const cleaned = tickerInput.trim().toUpperCase();
@@ -55,11 +96,21 @@ const GannChartTest = () => {
 
   // Price -> integer grid square. The x10 preserves one decimal of price.
   const targetNumber = levelsData ? Math.round(levelsData.price * 10) : 810;
-  const sunDegree = levelsData ? Math.round(levelsData.sun_angle) : 71;
-  const moonDegree =
-    levelsData && levelsData.moon_position
+
+  const sunDegree = livePositions
+    ? livePositions.sunDegree
+    : levelsData
+      ? Math.round(levelsData.sun_angle)
+      : 71;
+
+  const moonDegree = livePositions
+    ? livePositions.moonDegree
+    : levelsData && levelsData.moon_position
       ? Math.round(levelsData.moon_position.angle)
       : null;
+
+  const sunDetail = livePositions ? livePositions.sun : levelsData?.sun_position;
+  const moonDetail = livePositions ? livePositions.moon : levelsData?.moon_position;
 
   return (
     <Layout>
@@ -169,8 +220,8 @@ const GannChartTest = () => {
                       <strong className="me-2">Sun:</strong>
                       <span className="badge bg-warning text-dark">{sunDegree}°</span>
                       <span className="ms-2 text-muted">
-                        ({levelsData.sun_position?.zodiac_sign || 'N/A'}{' '}
-                        {Number(levelsData.sun_position?.degrees_in_sign ?? 0).toFixed(2)}°)
+                        ({sunDetail?.zodiac_sign || 'N/A'}{' '}
+                        {Number(sunDetail?.degrees_in_sign ?? 0).toFixed(2)}°)
                       </span>
                     </div>
                     {moonDegree !== null && (
@@ -178,8 +229,8 @@ const GannChartTest = () => {
                         <strong className="me-2">Moon:</strong>
                         <span className="badge bg-secondary">{moonDegree}°</span>
                         <span className="ms-2 text-muted">
-                          ({levelsData.moon_position?.zodiac_sign || 'N/A'}{' '}
-                          {Number(levelsData.moon_position?.degrees_in_sign ?? 0).toFixed(2)}°)
+                          ({moonDetail?.zodiac_sign || 'N/A'}{' '}
+                          {Number(moonDetail?.degrees_in_sign ?? 0).toFixed(2)}°)
                         </span>
                       </div>
                     )}
