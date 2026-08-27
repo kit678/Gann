@@ -1,5 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { buildGannSquare, findLevels, normalizeBodyDegree, MAX_CELLS } from '../utils/gannGrid';
+import {
+  buildGannSquare, findLevels, normalizeBodyDegree, MAX_CELLS,
+  DEFAULT_ZERO_DEGREE_OFFSET,
+} from '../utils/gannGrid';
 import { fitView, zoomAt, visibleCellRange, MIN_ZOOM, MAX_ZOOM } from '../utils/gannView';
 
 const VIEWPORT_WIDTH = 900;
@@ -79,6 +82,7 @@ const GannSquareChart = ({
   showMoon = true,
   cellSize = 40,
   highlightSpokes = true,
+  zeroDegreeOffset = DEFAULT_ZERO_DEGREE_OFFSET,
   onLevelsChange,
 }) => {
   const canvasRef = useRef(null);
@@ -86,8 +90,9 @@ const GannSquareChart = ({
   const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0 });
 
-  const sunDegree = normalizeBodyDegree(sunPosition);
-  const moonDegree = moonPosition == null ? null : normalizeBodyDegree(moonPosition);
+  const sunDegree = normalizeBodyDegree(sunPosition, 71, zeroDegreeOffset);
+  const moonDegree =
+    moonPosition == null ? null : normalizeBodyDegree(moonPosition, 71, zeroDegreeOffset);
   const isConjunct = moonDegree !== null && moonDegree === sunDegree;
 
   // Build one grid per visible body. The spiral itself is identical; only the

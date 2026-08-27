@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import GannSquareChart from '../components/GannSquareChart';
 import { getLevelsForTicker, getCelestial } from '../utils/api';
+import { ZERO_DEGREE_PRESETS, DEFAULT_ZERO_DEGREE_OFFSET } from '../utils/gannGrid';
 
 /**
  * Current wall-clock time in US Eastern, as 'YYYY-MM-DDTHH:mm'. Used as the
@@ -31,6 +32,7 @@ const GannChartTest = () => {
   const [showSun, setShowSun] = useState(true);
   const [showMoon, setShowMoon] = useState(true);
   const [chartLevels, setChartLevels] = useState(null);
+  const [zeroDegreeOffset, setZeroDegreeOffset] = useState(DEFAULT_ZERO_DEGREE_OFFSET);
 
   // Live-polled positions. Null means "use whatever came back with the price".
   const [livePositions, setLivePositions] = useState(null);
@@ -200,6 +202,32 @@ const GannChartTest = () => {
               </div>
 
               <div className="col-md-3">
+                <label htmlFor="zeroDegreeOffset" className="form-label mb-1 d-block">
+                  0° line <span className="text-muted">(square offset)</span>:
+                </label>
+                <div className="d-flex align-items-center">
+                  <input
+                    type="number"
+                    className="form-control"
+                    id="zeroDegreeOffset"
+                    value={zeroDegreeOffset}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      setZeroDegreeOffset(Number.isFinite(n) ? n : 0);
+                    }}
+                    style={{ maxWidth: '90px' }}
+                  />
+                  <span className="ms-2 text-muted" style={{ fontSize: '0.8rem' }}>
+                    {zeroDegreeOffset === ZERO_DEGREE_PRESETS.oddSquare
+                      ? '0° → 361 (odd-square line)'
+                      : zeroDegreeOffset === ZERO_DEGREE_PRESETS.legacy
+                        ? '0° → 360 (legacy)'
+                        : `0° → ${360 + zeroDegreeOffset}`}
+                  </span>
+                </div>
+              </div>
+
+              <div className="col-md-3">
                 <div className="form-check">
                   <input className="form-check-input" type="checkbox" id="showSun"
                          checked={showSun} onChange={(e) => setShowSun(e.target.checked)} />
@@ -299,6 +327,7 @@ const GannChartTest = () => {
           showMoon={showMoon}
           cellSize={cellSize}
           highlightSpokes={highlightSpokes}
+          zeroDegreeOffset={zeroDegreeOffset}
           onLevelsChange={setChartLevels}
         />
       </div>

@@ -1,5 +1,5 @@
 import { buildGannSquare, findLevels } from '../gannGrid';
-import { normalizeBodyDegree } from '../gannGrid';
+import { normalizeBodyDegree, ZERO_DEGREE_PRESETS } from '../gannGrid';
 
 /**
  * Baselines captured from the running application before the extraction.
@@ -75,6 +75,47 @@ describe('normalizeBodyDegree', () => {
   test('wraps values at or beyond a full turn', () => {
     expect(normalizeBodyDegree(361)).toBe(1);
     expect(normalizeBodyDegree(720)).toBe(360);
+  });
+});
+
+describe('zero-degree line offset', () => {
+  test('an offset of 0 reproduces the original mapping', () => {
+    expect(normalizeBodyDegree(0, 71, 0)).toBe(360);
+    expect(normalizeBodyDegree(152.3, 71, 0)).toBe(152);
+  });
+
+  test('the odd-square offset puts 0 degrees on square 361', () => {
+    // 361 = 19^2, the ring-9 odd square lying exactly on the diagonal.
+    expect(normalizeBodyDegree(0, 71, ZERO_DEGREE_PRESETS.oddSquare)).toBe(361);
+    expect(normalizeBodyDegree(360, 71, ZERO_DEGREE_PRESETS.oddSquare)).toBe(361);
+  });
+
+  test('the offset shifts every degree by the same amount', () => {
+    const offset = ZERO_DEGREE_PRESETS.oddSquare;
+    expect(normalizeBodyDegree(1, 71, offset)).toBe(2);
+    expect(normalizeBodyDegree(359, 71, offset)).toBe(360);
+  });
+
+  test('the fallback is offset too, so it stays on the same relative square', () => {
+    expect(normalizeBodyDegree(undefined, 71, 1)).toBe(72);
+  });
+
+  test('a negative offset wraps back into the 1..360+offset window', () => {
+    expect(normalizeBodyDegree(1, 71, -1)).toBe(360);
+  });
+
+  test('square 361 sits on the same diagonal as the lower odd squares', () => {
+    const grid = buildGannSquare(400, 361);
+    const centre = Math.floor((grid.dimension - 1) / 2);
+    const onAntiDiagonal = (value) => {
+      const cell = grid.positionSequence.find((p) => p.value === value);
+      return cell.row - centre === -(cell.col - centre);
+    };
+    [1, 9, 25, 49, 81, 121, 169, 225, 289, 361].forEach((sq) => {
+      expect(onAntiDiagonal(sq)).toBe(true);
+    });
+    // The old 0-degree square was one cell short of that diagonal.
+    expect(onAntiDiagonal(360)).toBe(false);
   });
 });
 

@@ -9,7 +9,26 @@
 export const MAX_CELLS = 4000000;
 
 /**
- * Convert a raw body longitude into a valid square number in 1..360.
+ * Where the 0-degree line sits, expressed as a shift in squares.
+ *
+ * A body's degree is used as a square *value*, not as an angle, so "rotating"
+ * the wheel means shifting which square a given degree lands on.
+ *
+ * - `legacy` (0): 0 degrees lands on square 360.
+ * - `oddSquare` (1): 0 degrees lands on square 361 = 19^2. Every odd square
+ *   (1, 9, 25 ... 361) lies exactly on one diagonal, and 361 is 360 squares
+ *   out from the centre at ring 9 - so a body at 0 degrees casts its diagonal
+ *   along that odd-square line.
+ */
+export const ZERO_DEGREE_PRESETS = {
+  legacy: 0,
+  oddSquare: 1,
+};
+
+export const DEFAULT_ZERO_DEGREE_OFFSET = ZERO_DEGREE_PRESETS.oddSquare;
+
+/**
+ * Convert a raw body longitude into a valid square number.
  *
  * The spiral has no square 0, and `deg || fallback` would silently turn a
  * legitimate 0 degrees into the fallback. 0 and 360 are the same point on a
@@ -17,12 +36,16 @@ export const MAX_CELLS = 4000000;
  *
  * @param {number} degree - longitude in degrees
  * @param {number} [fallback] - used only when degree is not a finite number
- * @returns {number} an integer in 1..360
+ * @param {number} [offset] - zero-degree line shift, see ZERO_DEGREE_PRESETS
+ * @returns {number} an integer square in (1..360) + offset
  */
-export function normalizeBodyDegree(degree, fallback = 71) {
-  if (!Number.isFinite(degree)) return fallback;
-  const wrapped = ((Math.round(degree) % 360) + 360) % 360;
-  return wrapped === 0 ? 360 : wrapped;
+export function normalizeBodyDegree(degree, fallback = 71, offset = 0) {
+  const raw = Number.isFinite(degree) ? degree : fallback;
+  const wrapped = ((Math.round(raw) % 360) + 360) % 360;
+  const shifted = (wrapped === 0 ? 360 : wrapped) + offset;
+  // A negative offset can push a low degree to 0 or below. There is no square
+  // 0, so wrap forward a full turn to stay on a real square.
+  return shifted < 1 ? shifted + 360 : shifted;
 }
 
 /**
