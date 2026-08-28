@@ -14,6 +14,7 @@ const LABEL_MIN_CELL_PX = 14;
 const COLORS = {
   grid: '#ddd',
   text: '#333',
+  centerCross: 'rgba(150, 150, 150, 0.35)',
   center: 'rgba(100, 200, 100, 0.5)',
   oddSquare: 'rgba(100, 100, 200, 0.5)',
   target: 'rgba(255, 165, 0, 0.6)',
@@ -222,6 +223,14 @@ const GannSquareChart = ({
     const drawLabels = scaledCell >= LABEL_MIN_CELL_PX;
     const gridPx = dimension * cellSize;
 
+    // Square 1's own cardinal+ordinal cross - fixed at the grid's centre,
+    // unlike the Sun/Moon crosses which move with their degree.
+    const centre = Math.floor((dimension - 1) / 2);
+    const onCentreCross = (row, col) =>
+      row === centre || col === centre ||
+      row - centre === col - centre ||
+      row - centre === -(col - centre);
+
     // Grid lines - only the visible ones
     ctx.strokeStyle = COLORS.grid;
     ctx.lineWidth = 1 / view.zoom;
@@ -280,6 +289,11 @@ const GannSquareChart = ({
         const x = col * cellSize;
         const y = row * cellSize;
         const key = cellKey(row, col);
+
+        if (onCentreCross(row, col)) {
+          ctx.fillStyle = COLORS.centerCross;
+          ctx.fillRect(x, y, cellSize, cellSize);
+        }
 
         if (value === 1) {
           ctx.fillStyle = COLORS.center;
@@ -402,6 +416,7 @@ const GannSquareChart = ({
       />
 
       <div className="d-flex flex-wrap mt-2" style={{ gap: '1rem', fontSize: '0.85rem' }}>
+        <Swatch color={COLORS.centerCross} label="Center's cardinal/ordinal cross" />
         <Swatch color={COLORS.center} label="Center (1)" />
         <Swatch color={COLORS.oddSquare} label="Odd squares (9, 25, 49...)" />
         <Swatch color={COLORS.target} label="Price square" />
