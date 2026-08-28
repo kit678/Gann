@@ -33,6 +33,9 @@ const GannChartTest = () => {
   const [showMoon, setShowMoon] = useState(true);
   const [chartLevels, setChartLevels] = useState(null);
   const [zeroDegreeOffset, setZeroDegreeOffset] = useState(DEFAULT_ZERO_DEGREE_OFFSET);
+  // Whether this ticker's price is scaled x10 before being plotted. Which one
+  // reads better is judged per ticker by eye, so it stays a manual choice.
+  const [multiplyBy10, setMultiplyBy10] = useState(true);
 
   // Live-polled positions. Null means "use whatever came back with the price".
   const [livePositions, setLivePositions] = useState(null);
@@ -108,8 +111,10 @@ const GannChartTest = () => {
     if (cleaned) setTicker(cleaned);
   };
 
-  // Price -> integer grid square. The x10 preserves one decimal of price.
-  const targetNumber = levelsData ? Math.round(levelsData.price * 10) : 810;
+  // Price -> integer grid square. The optional x10 preserves one decimal of
+  // price, which tightens the ring the price sits in.
+  const priceScale = multiplyBy10 ? 10 : 1;
+  const targetNumber = levelsData ? Math.round(levelsData.price * priceScale) : 81 * priceScale;
 
   const sunDegree = livePositions
     ? livePositions.sunDegree
@@ -239,6 +244,14 @@ const GannChartTest = () => {
                   <label className="form-check-label" htmlFor="showMoon">Show Moon</label>
                 </div>
                 <div className="form-check">
+                  <input className="form-check-input" type="checkbox" id="multiplyBy10"
+                         checked={multiplyBy10}
+                         onChange={(e) => setMultiplyBy10(e.target.checked)} />
+                  <label className="form-check-label" htmlFor="multiplyBy10">
+                    Multiply price &times;10
+                  </label>
+                </div>
+                <div className="form-check">
                   <input className="form-check-input" type="checkbox" id="highlightSpokes"
                          checked={highlightSpokes}
                          onChange={(e) => setHighlightSpokes(e.target.checked)} />
@@ -266,6 +279,9 @@ const GannChartTest = () => {
                       </span>
                       <span className="ms-2 text-muted">
                         {levelsData.price_date ? `as of ${levelsData.price_date}` : '(live)'}
+                      </span>
+                      <span className="ms-2 text-muted">
+                        → square {targetNumber}{multiplyBy10 ? ' (×10)' : ''}
                       </span>
                     </div>
                     <div>
