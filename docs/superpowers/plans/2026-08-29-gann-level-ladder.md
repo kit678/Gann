@@ -505,12 +505,14 @@ describe('buildLadder', () => {
   });
 
   test('subdivides the segment straddling the price', () => {
-    // 27 sits between 25 and 28. That segment must be present.
+    // 27 sits between 25 and 28. That segment must be present. The ladder
+    // is sorted descending overall, so this segment's own sub-levels come
+    // out highest-first too - 27.625 down to 25.375.
     const subs = centreLadder().filter(
       (l) => l.kind === 'sub' && l.segmentStart === 25 && l.segmentEnd === 28
     );
     expect(subs.map((l) => l.square)).toEqual([
-      25.375, 25.75, 26.125, 26.5, 26.875, 27.25, 27.625,
+      27.625, 27.25, 26.875, 26.5, 26.125, 25.75, 25.375,
     ]);
   });
 
