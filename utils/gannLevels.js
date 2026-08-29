@@ -79,3 +79,39 @@ export function subdivide(lo, hi, parts = 8) {
 export function ringOf(square) {
   return Math.max(1, Math.floor((Math.sqrt(square) + 1) / 2));
 }
+
+/**
+ * Collect the squares lying on a cross, walking the spiral out from and back
+ * from the price's square.
+ *
+ * The cross's own centre cell is excluded, since armDegree returns null for
+ * it and it therefore has no arm to be labelled with.
+ *
+ * @param {object} grid - from buildGannSquare
+ * @param {{row:number, col:number}} crossCentre
+ * @param {{row:number, col:number}} targetPosition - the price's square
+ * @param {number} [count] - marks to collect in each direction
+ * @returns {{up: object[], down: object[]}} cells in walk order
+ */
+export function crossMarks(grid, crossCentre, targetPosition, count = 8) {
+  const up = [];
+  const down = [];
+  const { positionSequence } = grid;
+
+  const targetIndex = positionSequence.findIndex(
+    (p) => p.row === targetPosition.row && p.col === targetPosition.col
+  );
+  if (targetIndex === -1) return { up, down };
+
+  for (let i = targetIndex + 1; i < positionSequence.length && up.length < count; i++) {
+    const cell = positionSequence[i];
+    if (armDegree(cell, crossCentre) !== null) up.push(cell);
+  }
+
+  for (let i = targetIndex - 1; i >= 0 && down.length < count; i--) {
+    const cell = positionSequence[i];
+    if (armDegree(cell, crossCentre) !== null) down.push(cell);
+  }
+
+  return { up, down };
+}

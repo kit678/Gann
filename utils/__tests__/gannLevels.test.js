@@ -104,3 +104,70 @@ describe('ringOf', () => {
     expect(ringOf(0)).toBe(1);
   });
 });
+
+import { crossMarks } from '../gannLevels';
+
+describe('crossMarks', () => {
+  test('reproduces the worked example walking out from 27', () => {
+    const grid = buildGannSquare(27, 1);
+    const marks = crossMarks(grid, grid.bodyPosition, grid.targetPosition, 8);
+    expect(marks.up.map((c) => c.value)).toEqual([28, 31, 34, 37, 40, 43, 46, 49]);
+    expect(marks.down.map((c) => c.value)).toEqual([25, 23, 21, 19, 17, 15, 13, 11]);
+  });
+
+  test('the inward walk steps by the inner ring width', () => {
+    // Ring 2 spans 9..24 with a 45 degree step of 2, so 25, 23, 21 ... 11.
+    const grid = buildGannSquare(27, 1);
+    const marks = crossMarks(grid, grid.bodyPosition, grid.targetPosition, 8);
+    const gaps = marks.down
+      .slice(1)
+      .map((cell, i) => marks.down[i].value - cell.value);
+    expect(gaps).toEqual([2, 2, 2, 2, 2, 2, 2]);
+  });
+
+  test('honours the requested count', () => {
+    const grid = buildGannSquare(27, 1);
+    const marks = crossMarks(grid, grid.bodyPosition, grid.targetPosition, 3);
+    expect(marks.up).toHaveLength(3);
+    expect(marks.down).toHaveLength(3);
+  });
+
+  test('returns fewer marks rather than throwing near the grid edge', () => {
+    const grid = buildGannSquare(27, 1);
+    const marks = crossMarks(grid, grid.bodyPosition, grid.targetPosition, 500);
+    expect(marks.up.length).toBeLessThan(500);
+    expect(marks.up.length).toBeGreaterThan(0);
+  });
+
+  test('returns empty lists when the target is not on the grid', () => {
+    const grid = buildGannSquare(27, 1);
+    const marks = crossMarks(grid, grid.bodyPosition, { row: -1, col: -1 }, 8);
+    expect(marks.up).toEqual([]);
+    expect(marks.down).toEqual([]);
+  });
+
+  test('an off-centre cross still returns the requested count', () => {
+    const grid = buildGannSquare(3197, 155);
+    const marks = crossMarks(grid, grid.bodyPosition, grid.targetPosition, 8);
+    expect(marks.up).toHaveLength(8);
+    expect(marks.down).toHaveLength(8);
+  });
+
+  test('an off-centre cross yields unevenly spaced marks', () => {
+    const grid = buildGannSquare(3197, 155);
+    const marks = crossMarks(grid, grid.bodyPosition, grid.targetPosition, 8);
+    const gaps = marks.up
+      .slice(1)
+      .map((cell, i) => cell.value - marks.up[i].value);
+    expect(new Set(gaps).size).toBeGreaterThan(1);
+  });
+
+  test('arm angles advance in order and wrap after eight, off-centre too', () => {
+    const grid = buildGannSquare(3197, 155);
+    const marks = crossMarks(grid, grid.bodyPosition, grid.targetPosition, 9);
+    const degrees = marks.up.map((c) => armDegree(c, grid.bodyPosition));
+    // Eight consecutive marks are one full cycle, so the ninth repeats the first.
+    expect(degrees[8]).toBe(degrees[0]);
+    expect(new Set(degrees.slice(0, 8)).size).toBe(8);
+  });
+});
