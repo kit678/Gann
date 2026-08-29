@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import GannSquareChart from '../components/GannSquareChart';
+import LevelLadderTable from '../components/LevelLadderTable';
 import { getLevelsForTicker, getCelestial } from '../utils/api';
 import { ZERO_DEGREE_PRESETS, DEFAULT_ZERO_DEGREE_OFFSET } from '../utils/gannGrid';
 
@@ -36,6 +37,9 @@ const GannChartTest = () => {
   // Whether this ticker's price is scaled x10 before being plotted. Which one
   // reads better is judged per ticker by eye, so it stays a manual choice.
   const [multiplyBy10, setMultiplyBy10] = useState(true);
+  const [ladders, setLadders] = useState(null);
+  const [markCount, setMarkCount] = useState(8);
+  const [showLadder, setShowLadder] = useState(false);
 
   // Live-polled positions. Null means "use whatever came back with the price".
   const [livePositions, setLivePositions] = useState(null);
@@ -232,6 +236,25 @@ const GannChartTest = () => {
                 </div>
               </div>
 
+              <div className="col-md-2">
+                <label htmlFor="markCount" className="form-label mb-1 d-block">
+                  Marks <span className="text-muted">(each way)</span>:
+                </label>
+                <input
+                  type="number"
+                  className="form-control"
+                  id="markCount"
+                  value={markCount}
+                  min="1"
+                  max="64"
+                  onChange={(e) => {
+                    const n = parseInt(e.target.value, 10);
+                    setMarkCount(Number.isFinite(n) && n > 0 ? n : 8);
+                  }}
+                  style={{ maxWidth: '90px' }}
+                />
+              </div>
+
               <div className="col-md-3">
                 <div className="form-check">
                   <input className="form-check-input" type="checkbox" id="showSun"
@@ -344,8 +367,38 @@ const GannChartTest = () => {
           cellSize={cellSize}
           highlightSpokes={highlightSpokes}
           zeroDegreeOffset={zeroDegreeOffset}
+          priceScale={priceScale}
+          markCount={markCount}
           onLevelsChange={setChartLevels}
+          onLaddersChange={setLadders}
         />
+
+        {ladders && (
+          <div className="card mt-4">
+            <div className="card-body">
+              <div className="d-flex align-items-center justify-content-between mb-2">
+                <strong>Level ladder</strong>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => setShowLadder((v) => !v)}
+                >
+                  {showLadder ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              {showLadder && (
+                <LevelLadderTable
+                  ladders={[
+                    ladders.center,
+                    showSun ? ladders.sun : [],
+                    showMoon ? ladders.moon : [],
+                  ]}
+                  price={levelsData ? levelsData.price : null}
+                />
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );
