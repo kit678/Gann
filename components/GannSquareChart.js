@@ -3,6 +3,7 @@ import {
   buildGannSquare, findLevels, normalizeBodyDegree, MAX_CELLS,
   DEFAULT_ZERO_DEGREE_OFFSET,
 } from '../utils/gannGrid';
+import { buildLadder } from '../utils/gannLevels';
 import { fitView, zoomAt, visibleCellRange, MIN_ZOOM, MAX_ZOOM } from '../utils/gannView';
 
 const VIEWPORT_WIDTH = 900;
@@ -84,7 +85,10 @@ const GannSquareChart = ({
   cellSize = 40,
   highlightSpokes = true,
   zeroDegreeOffset = DEFAULT_ZERO_DEGREE_OFFSET,
+  priceScale = 1,
+  markCount = 8,
   onLevelsChange,
+  onLaddersChange,
 }) => {
   const canvasRef = useRef(null);
   const [view, setView] = useState({ zoom: 1, panX: 0, panY: 0 });
@@ -115,6 +119,51 @@ const GannSquareChart = ({
     () => (moonGrid ? findLevels(moonGrid, 3) : { up: [], down: [] }),
     [moonGrid]
   );
+
+  // The centre cross sits on the cell holding value 1, which is the grid
+  // centre. Reusing sunGrid avoids building a third identical spiral.
+  const centreCross = useMemo(() => {
+    if (!sunGrid.dimension) return null;
+    const middle = Math.floor((sunGrid.dimension - 1) / 2);
+    return { row: middle, col: middle };
+  }, [sunGrid]);
+
+  const ladders = useMemo(() => {
+    if (sunGrid.tooLarge || !sunGrid.targetFound || !centreCross) return null;
+
+    const result = {
+      center: buildLadder({
+        grid: sunGrid,
+        crossCentre: centreCross,
+        source: 'center',
+        scale: priceScale,
+        count: markCount,
+      }),
+      sun: sunGrid.bodyFound
+        ? buildLadder({
+            grid: sunGrid,
+            crossCentre: sunGrid.bodyPosition,
+            source: 'sun',
+            scale: priceScale,
+            count: markCount,
+          })
+        : [],
+      moon: moonGrid && moonGrid.bodyFound
+        ? buildLadder({
+            grid: moonGrid,
+            crossCentre: moonGrid.bodyPosition,
+            source: 'moon',
+            scale: priceScale,
+            count: markCount,
+          })
+        : [],
+    };
+    return result;
+  }, [sunGrid, moonGrid, centreCross, priceScale, markCount]);
+
+  useEffect(() => {
+    if (onLaddersChange) onLaddersChange(ladders);
+  }, [ladders, onLaddersChange]);
 
   const tooLarge = sunGrid.tooLarge;
   const dimension = sunGrid.dimension;
