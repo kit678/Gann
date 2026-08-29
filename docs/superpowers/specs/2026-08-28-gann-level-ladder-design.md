@@ -59,15 +59,30 @@ so a revolution yields eight marks in clean angular order. Verified for ring 3:
 |---|---|---|---|---|---|---|---|---|---|
 | Square | 25 | 28 | 31 | 34 | 37 | 40 | 43 | 46 | 49 |
 
-**This regularity does not carry over to the Sun and Moon crosses.** A spiral
-revolution is a ring around the grid's centre, so it only tiles evenly against
-a cross that shares that centre. Measured mark counts per revolution for
-off-centre crosses ran 5, 12, 8, 2, 11, 16 across successive rings — not 8.
+**The angular ordering holds for every cross.** Walking the spiral outward from
+any cross's centre, successive marks step through the arms in strict order and
+wrap after eight. Verified for the centre cross and for Sun and Moon crosses at
+155° and 331°, all three producing
+`315 → 0 → 45 → 90 → 135 → 180 → 225 → 270 → 315 → …`. So eight consecutive
+marks always constitute one full cycle, on any cross.
 
-The arm angle itself remains well defined for every mark on every cross, since
-it depends only on the offset between the mark and its own cross centre. So
-angle labelling is universal; even *spacing* is not. Ladders are therefore
-sized by mark count, not by revolutions.
+**Two things do not carry over to off-centre crosses:**
+
+1. *Spacing is uneven.* The centre cross's marks are equally spaced (gaps of
+   28, 29, 29, 29, 29, 29, 29 measured from square 3197). An off-centre cross
+   is not: the Sun at 155° gave 24, 35, 35, 33, 33, 23, 23, and the Moon at
+   331° gave 31, 38, 38, 26, 26, 20, 20. The spacing also changes over time as
+   the body moves. Each gap must therefore be subdivided by its own width; no
+   shared step size may be assumed.
+
+2. *Cycles do not align with value-rings.* A value-ring is a band between odd
+   squares, which is a ring around the *grid's* centre. It only contains
+   exactly one arm-cycle when the cross shares that centre. Mark counts per
+   value-ring for off-centre crosses measured 5, 12, 8, 2, 11, 16 across
+   successive rings.
+
+Because of (2), ladders are sized by mark count, not by value-rings. Because of
+(1), each segment carries its own step.
 
 ### The eight sub-levels
 
@@ -275,6 +290,9 @@ Unit tests in `utils/__tests__/gannLevels.test.js`:
 - Sun and Moon at the same degree produce identical ladders.
 - An off-centre cross produces unevenly spaced majors; the ladder still
   subdivides each gap into its own eighths rather than assuming a shared step.
+- Arm angles advance in strict order and wrap after eight, on the centre cross
+  and on off-centre crosses alike. Eight consecutive marks span exactly one
+  cycle and return to the starting angle.
 - Scale 10 vs 1 changes `price` but not `square`.
 - Fractional sub-levels survive the scale conversion without rounding to
   integers.
