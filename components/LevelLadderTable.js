@@ -18,7 +18,7 @@ const SOURCE_CLASSES = {
  */
 const LevelLadderTable = ({ ladders = [], price = null }) => {
   const rows = useMemo(() => {
-    const merged = ladders.flat().slice().sort((a, b) => b.price - a.price);
+    const merged = ladders.flat().sort((a, b) => b.price - a.price);
     if (price === null) return merged;
 
     const index = merged.findIndex((level) => level.price <= price);
@@ -45,14 +45,14 @@ const LevelLadderTable = ({ ladders = [], price = null }) => {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) =>
+          {rows.map((row) =>
             row.isPriceMarker ? (
               <tr key="price-marker" className="table-warning fw-bold">
                 <td>{row.price.toFixed(4)}</td>
                 <td colSpan={5}>← current price</td>
               </tr>
             ) : (
-              <tr key={`${row.source}-${row.square}-${i}`}>
+              <tr key={`${row.source}-${row.square}`}>
                 <td>{row.price.toFixed(4)}</td>
                 <td>{row.square}</td>
                 <td className={SOURCE_CLASSES[row.source]}>
