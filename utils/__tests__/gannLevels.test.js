@@ -171,3 +171,172 @@ describe('crossMarks', () => {
     expect(new Set(degrees.slice(0, 8)).size).toBe(8);
   });
 });
+
+import { buildLadder } from '../gannLevels';
+
+const centreLadder = (overrides = {}) => {
+  const grid = buildGannSquare(27, 1);
+  return buildLadder({
+    grid,
+    crossCentre: grid.bodyPosition,
+    source: 'center',
+    scale: 1,
+    count: 8,
+    ...overrides,
+  });
+};
+
+describe('buildLadder', () => {
+  test('includes the majors from the worked example', () => {
+    const majors = centreLadder()
+      .filter((l) => l.kind === 'major')
+      .map((l) => l.square);
+    [11, 13, 25, 28, 31, 49].forEach((sq) => expect(majors).toContain(sq));
+  });
+
+  test('subdivides the segment straddling the price', () => {
+    // 27 sits between 25 and 28. That segment must be present.
+    const subs = centreLadder().filter(
+      (l) => l.kind === 'sub' && l.segmentStart === 25 && l.segmentEnd === 28
+    );
+    expect(subs.map((l) => l.square)).toEqual([
+      27.625, 27.25, 26.875, 26.5, 26.125, 25.75, 25.375,
+    ]);
+  });
+
+  test('the straddling segment yields levels on both sides of the price', () => {
+    const subs = centreLadder().filter(
+      (l) => l.kind === 'sub' && l.segmentStart === 25
+    );
+    expect(subs.some((l) => l.direction === 'down')).toBe(true);
+    expect(subs.some((l) => l.direction === 'up')).toBe(true);
+  });
+
+  test('emits sub-indices 1 to 7 only, so no major is duplicated', () => {
+    const ladder = centreLadder();
+    const subIndices = new Set(
+      ladder.filter((l) => l.kind === 'sub').map((l) => l.subIndex)
+    );
+    expect([...subIndices].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+
+    const squares = ladder.map((l) => l.square);
+    expect(new Set(squares).size).toBe(squares.length);
+  });
+
+  test('flags the halfway sub-level', () => {
+    const halfway = centreLadder().filter((l) => l.isHalfway);
+    halfway.forEach((l) => expect(l.subIndex).toBe(4));
+    const straddling = halfway.find((l) => l.segmentStart === 25);
+    expect(straddling.square).toBe(26.5);
+  });
+
+  test('labels majors with their own arm angle', () => {
+    const bySquare = Object.fromEntries(
+      centreLadder()
+        .filter((l) => l.kind === 'major')
+        .map((l) => [l.square, l.degree])
+    );
+    expect(bySquare[25]).toBe(0);
+    expect(bySquare[28]).toBe(45);
+    expect(bySquare[49]).toBe(0);
+  });
+
+  test('sub-levels inherit the angle of the segment they open', () => {
+    const subs = centreLadder().filter((l) => l.segmentStart === 25);
+    subs.forEach((l) => expect(l.degree).toBe(0));
+  });
+
+  test('sub-levels take the ring of their segment start, not their own value', () => {
+    const grid = buildGannSquare(48, 1);
+    const ladder = buildLadder({
+      grid, crossCentre: grid.bodyPosition, source: 'center', scale: 1, count: 8,
+    });
+    // 49 opens ring 4. A sub-level just below it belongs to the segment that
+    // starts in ring 3, so it must be tagged ring 3.
+    const justBelow = ladder.find(
+      (l) => l.kind === 'sub' && l.segmentEnd === 49 && l.subIndex === 7
+    );
+    expect(justBelow.square).toBeGreaterThan(48);
+    expect(justBelow.ring).toBe(3);
+  });
+
+  test('scale changes price but not square', () => {
+    const plain = centreLadder({ scale: 1 });
+    const scaled = centreLadder({ scale: 10 });
+    expect(scaled[0].square).toBe(plain[0].square);
+    expect(scaled[0].price).toBeCloseTo(plain[0].square / 10, 10);
+  });
+
+  test('fractional sub-levels survive scaling without being rounded', () => {
+    const level = centreLadder({ scale: 10 }).find(
+      (l) => l.kind === 'sub' && l.square === 26.5
+    );
+    expect(level.price).toBeCloseTo(2.65, 10);
+  });
+
+  test('is sorted by square descending, so it reads like a price axis', () => {
+    const squares = centreLadder().map((l) => l.square);
+    const sorted = [...squares].sort((a, b) => b - a);
+    expect(squares).toEqual(sorted);
+  });
+
+  test('tags every level with the source it came from', () => {
+    centreLadder({ source: 'moon' }).forEach((l) =>
+      expect(l.source).toBe('moon')
+    );
+  });
+
+  test('Sun and Moon at different degrees give different ladders', () => {
+    const sunGrid = buildGannSquare(3197, 155);
+    const moonGrid = buildGannSquare(3197, 331);
+    const sun = buildLadder({
+      grid: sunGrid, crossCentre: sunGrid.bodyPosition, source: 'sun', scale: 10, count: 8,
+    });
+    const moon = buildLadder({
+      grid: moonGrid, crossCentre: moonGrid.bodyPosition, source: 'moon', scale: 10, count: 8,
+    });
+    expect(sun.map((l) => l.square)).not.toEqual(moon.map((l) => l.square));
+  });
+
+  test('the same degree for both bodies gives identical squares', () => {
+    const a = buildGannSquare(3197, 200);
+    const b = buildGannSquare(3197, 200);
+    const ladderA = buildLadder({
+      grid: a, crossCentre: a.bodyPosition, source: 'sun', scale: 10, count: 8,
+    });
+    const ladderB = buildLadder({
+      grid: b, crossCentre: b.bodyPosition, source: 'moon', scale: 10, count: 8,
+    });
+    expect(ladderA.map((l) => l.square)).toEqual(ladderB.map((l) => l.square));
+  });
+
+  test('an off-centre cross subdivides each gap by its own width', () => {
+    const grid = buildGannSquare(3197, 155);
+    const ladder = buildLadder({
+      grid, crossCentre: grid.bodyPosition, source: 'sun', scale: 10, count: 8,
+    });
+    const stepFor = (start) => {
+      const seg = ladder.filter((l) => l.kind === 'sub' && l.segmentStart === start);
+      return seg.length ? Math.abs(seg[0].square - start) : null;
+    };
+    const starts = [
+      ...new Set(ladder.filter((l) => l.kind === 'sub').map((l) => l.segmentStart)),
+    ];
+    const steps = starts.map(stepFor).filter((s) => s !== null);
+    expect(new Set(steps.map((s) => s.toFixed(6))).size).toBeGreaterThan(1);
+  });
+
+  test('returns an empty ladder when the target is missing', () => {
+    const grid = buildGannSquare(27, 1);
+    expect(
+      buildLadder({
+        grid,
+        crossCentre: grid.bodyPosition,
+        source: 'center',
+        scale: 1,
+        count: 8,
+        targetPosition: { row: -1, col: -1 },
+      })
+    ).toEqual([]);
+  });
+});

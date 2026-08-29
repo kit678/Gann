@@ -115,3 +115,88 @@ export function crossMarks(grid, crossCentre, targetPosition, count = 8) {
 
   return { up, down };
 }
+
+/** Sub-levels emitted per segment. The 8th is the next major mark. */
+const SUBS_PER_SEGMENT = 7;
+
+/** The sub-index that lands on the midpoint of a segment. */
+const HALFWAY_SUB_INDEX = 4;
+
+/**
+ * Build the full labeled level ladder for one cross.
+ *
+ * Marks are merged into a single ascending list before subdividing, so the
+ * segment straddling the price is treated like any other. That segment is the
+ * one price is actually trading inside, so it must not be skipped.
+ *
+ * @param {object} options
+ * @param {object} options.grid - from buildGannSquare
+ * @param {{row:number, col:number}} options.crossCentre
+ * @param {'center'|'sun'|'moon'} options.source
+ * @param {number} [options.scale] - price multiplier used to reach the grid
+ * @param {number} [options.count] - major marks per direction
+ * @param {{row:number, col:number}} [options.targetPosition] - defaults to
+ *   the grid's own target
+ * @returns {object[]} levels, sorted by square descending
+ */
+export function buildLadder({
+  grid,
+  crossCentre,
+  source,
+  scale = 1,
+  count = 8,
+  targetPosition = grid.targetPosition,
+}) {
+  const { up, down } = crossMarks(grid, crossCentre, targetPosition, count);
+  if (up.length === 0 && down.length === 0) return [];
+
+  const targetSquare = grid.matrix[targetPosition.row][targetPosition.col];
+  const directionOf = (square) => (square > targetSquare ? 'up' : 'down');
+
+  // Ascending: the inward walk reversed, then the outward walk. The pair
+  // straddling the price is now just the middle pair.
+  const ascending = [...down].reverse().concat(up);
+
+  const levels = ascending.map((cell) => ({
+    price: cell.value / scale,
+    square: cell.value,
+    source,
+    kind: 'major',
+    degree: armDegree(cell, crossCentre),
+    segmentStart: null,
+    segmentEnd: null,
+    subIndex: null,
+    isHalfway: false,
+    ring: ringOf(cell.value),
+    direction: directionOf(cell.value),
+  }));
+
+  for (let i = 0; i < ascending.length - 1; i++) {
+    const lo = ascending[i];
+    const hi = ascending[i + 1];
+    const points = subdivide(lo.value, hi.value);
+    // The segment's angle and ring come from the mark that opens it, so a
+    // sub-level near a ring boundary is not misattributed.
+    const segmentDegree = armDegree(lo, crossCentre);
+    const segmentRing = ringOf(lo.value);
+
+    for (let s = 0; s < SUBS_PER_SEGMENT; s++) {
+      const square = points[s];
+      levels.push({
+        price: square / scale,
+        square,
+        source,
+        kind: 'sub',
+        degree: segmentDegree,
+        segmentStart: lo.value,
+        segmentEnd: hi.value,
+        subIndex: s + 1,
+        isHalfway: s + 1 === HALFWAY_SUB_INDEX,
+        ring: segmentRing,
+        direction: directionOf(square),
+      });
+    }
+  }
+
+  return levels.sort((a, b) => b.square - a.square);
+}
