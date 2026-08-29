@@ -171,6 +171,44 @@ function isOnBodyCross(row, col, bodyPosition) {
 }
 
 /**
+ * Walk the spiral outward and inward from a square, collecting cells the
+ * predicate accepts.
+ *
+ * The predicate decides what "on the cross" means, and callers deliberately
+ * differ on one point: isOnBodyCross (below) accepts the cross's own centre
+ * cell, since a cell trivially shares a row and column with itself, whereas
+ * armDegree in gannLevels.js rejects it because that cell belongs to every
+ * arm at once and so has no single angle. Both behaviours are intended.
+ *
+ * @param {Array<{row,col,value}>} positionSequence - cells in spiral order
+ * @param {{row:number, col:number}} targetPosition - where to walk out from
+ * @param {number} count - how many cells to collect in each direction
+ * @param {(cell: {row,col,value}) => boolean} predicate
+ * @returns {{up: Array<{row,col,value}>, down: Array<{row,col,value}>}}
+ */
+export function walkSpiral(positionSequence, targetPosition, count, predicate) {
+  const up = [];
+  const down = [];
+
+  const targetIndex = positionSequence.findIndex(
+    (p) => p.row === targetPosition.row && p.col === targetPosition.col
+  );
+  if (targetIndex === -1) return { up, down };
+
+  for (let i = targetIndex + 1; i < positionSequence.length && up.length < count; i++) {
+    const cell = positionSequence[i];
+    if (predicate(cell)) up.push(cell);
+  }
+
+  for (let i = targetIndex - 1; i >= 0 && down.length < count; i--) {
+    const cell = positionSequence[i];
+    if (predicate(cell)) down.push(cell);
+  }
+
+  return { up, down };
+}
+
+/**
  * Walk the spiral outward and inward from the target square, collecting the
  * squares that fall on the body's cross.
  *
@@ -180,25 +218,10 @@ function isOnBodyCross(row, col, bodyPosition) {
  */
 export function findLevels(grid, count = 3) {
   const { positionSequence, targetPosition, bodyPosition, targetFound, bodyFound } = grid;
-  const up = [];
-  const down = [];
 
-  if (!targetFound || !bodyFound) return { up, down };
+  if (!targetFound || !bodyFound) return { up: [], down: [] };
 
-  const targetIndex = positionSequence.findIndex(
-    (p) => p.row === targetPosition.row && p.col === targetPosition.col
+  return walkSpiral(positionSequence, targetPosition, count, (cell) =>
+    isOnBodyCross(cell.row, cell.col, bodyPosition)
   );
-  if (targetIndex === -1) return { up, down };
-
-  for (let i = targetIndex + 1; i < positionSequence.length && up.length < count; i++) {
-    const cell = positionSequence[i];
-    if (isOnBodyCross(cell.row, cell.col, bodyPosition)) up.push(cell);
-  }
-
-  for (let i = targetIndex - 1; i >= 0 && down.length < count; i--) {
-    const cell = positionSequence[i];
-    if (isOnBodyCross(cell.row, cell.col, bodyPosition)) down.push(cell);
-  }
-
-  return { up, down };
 }

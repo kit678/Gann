@@ -5,6 +5,8 @@
  * docs/superpowers/specs/2026-08-28-gann-level-ladder-design.md
  */
 
+import { walkSpiral } from './gannGrid';
+
 /**
  * Arm angle by the sign of the offset from the cross centre.
  *
@@ -94,26 +96,12 @@ export function ringOf(square) {
  * @returns {{up: object[], down: object[]}} cells in walk order
  */
 export function crossMarks(grid, crossCentre, targetPosition, count = 8) {
-  const up = [];
-  const down = [];
-  const { positionSequence } = grid;
-
-  const targetIndex = positionSequence.findIndex(
-    (p) => p.row === targetPosition.row && p.col === targetPosition.col
+  return walkSpiral(
+    grid.positionSequence,
+    targetPosition,
+    count,
+    (cell) => armDegree(cell, crossCentre) !== null
   );
-  if (targetIndex === -1) return { up, down };
-
-  for (let i = targetIndex + 1; i < positionSequence.length && up.length < count; i++) {
-    const cell = positionSequence[i];
-    if (armDegree(cell, crossCentre) !== null) up.push(cell);
-  }
-
-  for (let i = targetIndex - 1; i >= 0 && down.length < count; i--) {
-    const cell = positionSequence[i];
-    if (armDegree(cell, crossCentre) !== null) down.push(cell);
-  }
-
-  return { up, down };
 }
 
 /** Sub-levels emitted per segment. The 8th is the next major mark. */
