@@ -153,9 +153,17 @@ export function buildLadder({
   const targetSquare = grid.matrix[targetPosition.row][targetPosition.col];
   const directionOf = (square) => (square > targetSquare ? 'up' : 'down');
 
-  // Ascending: the inward walk reversed, then the outward walk. The pair
-  // straddling the price is now just the middle pair.
-  const ascending = [...down].reverse().concat(up);
+  // If the price's own square happens to sit on the cross, it is itself a
+  // major mark. crossMarks only walks strictly outward from the target, so
+  // it never tests the target's own cell - insert it explicitly here, or the
+  // segments on either side of it would be wrongly merged into one.
+  const targetCell = { row: targetPosition.row, col: targetPosition.col, value: targetSquare };
+  const targetIsMajor = armDegree(targetCell, crossCentre) !== null;
+
+  // Ascending: the inward walk reversed, then the outward walk, with the
+  // target's own major (if any) spliced into its natural position between
+  // them.
+  const ascending = [...down].reverse().concat(targetIsMajor ? [targetCell] : [], up);
 
   const levels = ascending.map((cell) => ({
     price: cell.value / scale,

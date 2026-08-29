@@ -339,4 +339,28 @@ describe('buildLadder', () => {
       })
     ).toEqual([]);
   });
+
+  test('a price sitting exactly on a major mark is itself listed as a major', () => {
+    // 28 is on the centre cross's 45 degree arm (ring 3's second mark).
+    // crossMarks only walks strictly outward from the target, so without
+    // special handling the target's own square is silently dropped and the
+    // segments on either side of it get merged into one.
+    const grid = buildGannSquare(28, 1);
+    const ladder = buildLadder({
+      grid, crossCentre: grid.bodyPosition, source: 'center', scale: 1, count: 8,
+    });
+
+    const major = ladder.find((l) => l.square === 28);
+    expect(major.kind).toBe('major');
+    expect(major.degree).toBe(45);
+
+    // With 28 correctly present as its own major, the segments on either
+    // side are 25-28 and 28-31, not one merged 25-31 segment.
+    const segmentStarts = new Set(
+      ladder.filter((l) => l.kind === 'sub').map((l) => l.segmentStart)
+    );
+    expect(segmentStarts.has(25)).toBe(true);
+    expect(segmentStarts.has(28)).toBe(true);
+    expect(segmentStarts.has(24)).toBe(false); // no merged 25-31 span
+  });
 });

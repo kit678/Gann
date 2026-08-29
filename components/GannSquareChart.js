@@ -114,10 +114,13 @@ const GannSquareChart = ({
     [showMoon, targetNumber, moonDegree]
   );
 
-  const sunLevels = useMemo(() => findLevels(sunGrid, 3), [sunGrid]);
+  // Shares markCount with the ladder below so the canvas highlighting and the
+  // ladder table always agree on how many levels are shown - otherwise the
+  // table would list levels that have no highlighted cell to eyeball against.
+  const sunLevels = useMemo(() => findLevels(sunGrid, markCount), [sunGrid, markCount]);
   const moonLevels = useMemo(
-    () => (moonGrid ? findLevels(moonGrid, 3) : { up: [], down: [] }),
-    [moonGrid]
+    () => (moonGrid ? findLevels(moonGrid, markCount) : { up: [], down: [] }),
+    [moonGrid, markCount]
   );
 
   // The centre cross sits on the cell holding value 1, which is the grid
