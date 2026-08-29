@@ -49,3 +49,33 @@ export function armDegree(cell, crossCentre) {
   const key = `${Math.sign(dRow)},${Math.sign(dCol)}`;
   return ARM_BY_SIGN[key] ?? null;
 }
+
+/**
+ * Split a gap into equal parts, returning the division points.
+ *
+ * The final element equals `hi`. buildLadder drops it, because it is the next
+ * major mark and is already in the ladder under its own entry.
+ *
+ * @param {number} lo
+ * @param {number} hi
+ * @param {number} [parts]
+ * @returns {number[]} `parts` points, ending at `hi`
+ */
+export function subdivide(lo, hi, parts = 8) {
+  const step = (hi - lo) / parts;
+  return Array.from({ length: parts }, (_, i) => lo + step * (i + 1));
+}
+
+/**
+ * Which value ring a square falls in.
+ *
+ * Ring k spans (2k-1)^2 .. (2k+1)^2 - 1, a width of 8k. This is a band of
+ * values between consecutive odd squares - NOT a cell's distance from the
+ * grid centre. Square 361 is nine cells out but opens ring 10.
+ *
+ * @param {number} square
+ * @returns {number} ring index, at least 1
+ */
+export function ringOf(square) {
+  return Math.max(1, Math.floor((Math.sqrt(square) + 1) / 2));
+}

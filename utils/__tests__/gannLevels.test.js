@@ -1,5 +1,5 @@
 import { buildGannSquare } from '../gannGrid';
-import { armDegree } from '../gannLevels';
+import { armDegree, subdivide, ringOf } from '../gannLevels';
 
 /** The centre cross of a grid big enough to hold the worked example. */
 const centreGrid = () => {
@@ -49,5 +49,58 @@ describe('armDegree', () => {
       (p) => p.row === centre.row && p.col === centre.col - 1
     );
     expect(armDegree(left, centre)).toBe(45);
+  });
+});
+
+describe('subdivide', () => {
+  test('reproduces the worked example for 25 to 28', () => {
+    expect(subdivide(25, 28)).toEqual([
+      25.375, 25.75, 26.125, 26.5, 26.875, 27.25, 27.625, 28,
+    ]);
+  });
+
+  test('returns exactly eight points by default', () => {
+    expect(subdivide(0, 80)).toHaveLength(8);
+  });
+
+  test('the last point is the upper bound', () => {
+    const points = subdivide(49, 81);
+    expect(points[points.length - 1]).toBeCloseTo(81, 10);
+  });
+
+  test('honours a custom part count', () => {
+    expect(subdivide(0, 4, 4)).toEqual([1, 2, 3, 4]);
+  });
+
+  test('handles a descending range without reordering', () => {
+    // buildLadder always passes ascending pairs, but the maths must not
+    // silently misbehave if it ever does not.
+    expect(subdivide(28, 25, 4)).toEqual([27.25, 26.5, 25.75, 25]);
+  });
+});
+
+describe('ringOf', () => {
+  test('attributes the documented boundaries', () => {
+    const cases = [
+      [1, 1], [8, 1],
+      [9, 2], [24, 2],
+      [25, 3], [48, 3],
+      [49, 4], [80, 4],
+      [360, 9],
+      [361, 10], [440, 10],
+    ];
+    cases.forEach(([square, ring]) => {
+      expect(ringOf(square)).toBe(ring);
+    });
+  });
+
+  test('an odd square opens a ring rather than closing the previous one', () => {
+    expect(ringOf(24)).toBe(2);
+    expect(ringOf(25)).toBe(3);
+  });
+
+  test('never returns less than 1', () => {
+    expect(ringOf(1)).toBe(1);
+    expect(ringOf(0)).toBe(1);
   });
 });
