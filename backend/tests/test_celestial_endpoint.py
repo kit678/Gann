@@ -1,0 +1,131 @@
+"""
+Tests for the /api/celestial endpoint and ET datetime parsing.
+"""
+
+import sys
+import os
+import unittest
+from datetime import datetime, timezone
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from fastapi.testclient import TestClient
+from app.main import app
+from app.api.endpoints import parse_et_datetime
+
+client = TestClient(app)
+
+
+class TestParseEtDatetime(unittest.TestCase):
+    """ET input must convert to the correct UTC instant on both sides of DST."""
+
+    def test_summer_date_uses_edt_offset(self):
+        result = parse_et_datetime("2026-07-15T16:00")
+        self.assertEqual(result.astimezone(timezone.utc).hour, 20)
+
+    def test_winter_date_uses_est_offset(self):
+        result = parse_et_datetime("2026-01-15T16:00")
+        self.assertEqual(result.astimezone(timezone.utc).hour, 21)
+
+    def test_offsets_differ_across_the_dst_boundary(self):
+        summer = parse_et_datetime("2026-07-15T16:00").utcoffset()
+        winter = parse_et_datetime("2026-01-15T16:00").utcoffset()
+        self.assertNotEqual(summer, winter)
+
+    def test_dst_spring_forward_gap_is_rejected(self):
+        """2026-03-08 02:30 ET never happens - clocks jump 2:00 to 3:00."""
+        with self.assertRaises(ValueError):
+            parse_et_datetime("2026-03-08T02:30")
+
+    def test_dst_fall_back_fold_is_rejected(self):
+        """2026-11-01 01:30 ET happens twice - clocks fall back 2:00 to 1:00."""
+        with self.assertRaises(ValueError):
+            parse_et_datetime("2026-11-01T01:30")
+
+    def test_time_just_after_fall_back_is_unambiguous_and_accepted(self):
+        """03:00 ET only ever happens once, even on the fall-back day."""
+        result = parse_et_datetime("2026-11-01T03:00")
+        self.assertEqual(result.astimezone(timezone.utc).hour, 8)
+
+    def test_explicit_offset_is_rejected(self):
+        with self.assertRaises(ValueError):
+            parse_et_datetime("2026-07-15T16:00+05:30")
+
+    def test_garbage_is_rejected(self):
+        with self.assertRaises(ValueError):
+            parse_et_datetime("not-a-datetime")
+
+
+class TestCelestialEndpoint(unittest.TestCase):
+
+    def test_returns_both_bodies(self):
+        response = client.get("/api/celestial")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("sun", body)
+        self.assertIn("moon", body)
+        self.assertIn("angle", body["sun"])
+        self.assertIn("angle", body["moon"])
+
+    def test_echoes_both_timezones(self):
+        response = client.get("/api/celestial", params={"datetime": "2026-01-01T07:00"})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("datetime_et", body)
+        self.assertIn("datetime_utc", body)
+
+    def test_known_instant_matches_reference_longitudes(self):
+        """2026-01-01 07:00 ET is 12:00 UTC (EST, UTC-5)."""
+        response = client.get("/api/celestial", params={"datetime": "2026-01-01T07:00"})
+        body = response.json()
+        self.assertAlmostEqual(body["sun"]["angle"], 281.07802, places=2)
+        self.assertAlmostEqual(body["moon"]["angle"], 74.225405, places=2)
+
+    def test_bad_datetime_returns_400(self):
+        response = client.get("/api/celestial", params={"datetime": "nonsense"})
+        self.assertEqual(response.status_code, 400)
+
+
+class TestLevelsDatetime(unittest.TestCase):
+    """/api/levels must accept an ET datetime and report both bodies."""
+
+    def test_levels_include_moon_position(self):
+        response = client.get(
+            "/api/levels/AAPL", params={"datetime": "2026-01-02T16:00"}
+        )
+        if response.status_code != 200:
+            self.skipTest("market data unavailable")
+        body = response.json()
+        self.assertIn("sun_position", body)
+        self.assertIn("moon_position", body)
+        self.assertIn("angle", body["moon_position"])
+
+    def test_bad_datetime_returns_400(self):
+        response = client.get("/api/levels/AAPL", params={"datetime": "nonsense"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_date_alone_resolves_to_16_00_et(self):
+        """?date=X must produce the same instant as ?datetime=XT16:00."""
+        via_date = client.get("/api/levels/AAPL", params={"date": "2026-01-02"})
+        via_datetime = client.get(
+            "/api/levels/AAPL", params={"datetime": "2026-01-02T16:00"}
+        )
+        if via_date.status_code != 200 or via_datetime.status_code != 200:
+            self.skipTest("market data unavailable")
+        self.assertEqual(
+            via_date.json()["sun_position"]["angle"],
+            via_datetime.json()["sun_position"]["angle"],
+        )
+
+    def test_datetime_takes_precedence_over_date_when_both_given(self):
+        response = client.get(
+            "/api/levels/AAPL",
+            params={"date": "2026-01-02", "datetime": "2026-01-03T09:00"},
+        )
+        if response.status_code != 200:
+            self.skipTest("market data unavailable")
+        self.assertEqual(response.json()["price_date"], "2026-01-03")
+
+
+if __name__ == "__main__":
+    unittest.main()

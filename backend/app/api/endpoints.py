@@ -10,14 +10,20 @@ from typing import List, Dict, Any, Optional
 import logging
 import asyncio
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from ..utils.market_data import (
-    get_current_price, 
-    get_prices_for_tickers, 
+    get_current_price,
+    get_prices_for_tickers,
     get_historical_data,
     get_daily_prices
 )
-from ..utils.ephemeris import get_current_sun_angle, calculate_sun_position
+from ..utils.ephemeris import (
+    get_current_sun_angle,
+    calculate_sun_position,
+    calculate_moon_position,
+)
 from ..utils.levels_calculator import (
     calculate_levels_for_ticker,
     calculate_levels_for_tickers,
@@ -83,6 +89,92 @@ class LevelsResponse(BaseModel):
 
 
 # API endpoints
+EASTERN = ZoneInfo("America/New_York")
+UTC = ZoneInfo("UTC")
+
+
+def parse_et_datetime(value: str) -> datetime:
+    """
+    Parse a 'YYYY-MM-DDTHH:mm' string as US Eastern time.
+
+    Eastern is used because it is the session the closing prices belong to.
+    An explicit offset is rejected rather than silently reinterpreted, so a
+    caller can never believe they sent one timezone and get another. The two
+    DST transition edge cases get the same treatment for the same reason:
+    - "Spring forward" gap (e.g. 2026-03-08 02:30): this wall-clock time never
+      happens, so tagging it with a timezone would silently invent an instant
+      that doesn't exist.
+    - "Fall back" fold (e.g. 2026-11-01 01:30): this wall-clock time happens
+      twice (once EDT, once EST, an hour apart), so tagging it would silently
+      pick one and discard the other. A silent hour of drift here moves the
+      Moon by roughly half a degree - the same class of bug the ephemeris
+      UTC fix addressed.
+
+    Args:
+        value: datetime string with no offset suffix
+
+    Returns:
+        A timezone-aware datetime in US Eastern.
+
+    Raises:
+        ValueError: if the string is malformed, carries an offset, or falls
+                    in a DST gap or fold.
+    """
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        raise ValueError(
+            f"Invalid datetime '{value}'. Expected format YYYY-MM-DDTHH:mm."
+        )
+
+    if parsed.tzinfo is not None:
+        raise ValueError(
+            "Do not supply a UTC offset. Times are always interpreted as US Eastern."
+        )
+
+    aware = parsed.replace(tzinfo=EASTERN)
+    roundtrip = aware.astimezone(UTC).astimezone(EASTERN).replace(tzinfo=None)
+    if roundtrip != parsed:
+        raise ValueError(
+            f"'{value}' does not exist - it falls in the DST spring-forward gap "
+            f"when US Eastern clocks skip ahead."
+        )
+
+    if EASTERN.utcoffset(parsed.replace(fold=0)) != EASTERN.utcoffset(parsed.replace(fold=1)):
+        raise ValueError(
+            f"'{value}' is ambiguous - it occurs twice due to the DST fall-back "
+            f"transition. Pick a time outside that one-hour window."
+        )
+
+    return aware
+
+
+@router.get("/celestial")
+async def get_celestial_positions(
+    datetime_et: Optional[str] = Query(
+        None,
+        alias="datetime",
+        description="Optional 'YYYY-MM-DDTHH:mm' in US Eastern. Defaults to now.",
+    )
+):
+    """Get Sun and Moon positions for an instant, defaulting to now."""
+    try:
+        when = parse_et_datetime(datetime_et) if datetime_et is not None else datetime.now(EASTERN)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        return {
+            "datetime_et": when.strftime("%Y-%m-%d %H:%M:%S"),
+            "datetime_utc": when.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "sun": calculate_sun_position(when),
+            "moon": calculate_moon_position(when),
+        }
+    except Exception as e:
+        logger.error(f"Error computing celestial positions: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/sun", response_model=SunPositionResponse)
 async def get_sun_position():
     """Get the current position of the sun in the tropical zodiac."""
@@ -181,18 +273,33 @@ async def delete_ticker(ticker: str = Path(..., description="The ticker symbol t
 async def get_levels_for_ticker(
     ticker: str = Path(..., description="The ticker symbol"),
     recalculate: bool = Query(False, description="Whether to recalculate the levels"),
-    date: Optional[str] = Query(None, description="Optional date (YYYY-MM-DD) to price the ticker as-of. Defaults to the live price.")
+    date: Optional[str] = Query(None, description="Optional date (YYYY-MM-DD), priced at 16:00 ET (market close). Defaults to the live price."),
+    datetime_et: Optional[str] = Query(
+        None,
+        alias="datetime",
+        description="Optional 'YYYY-MM-DDTHH:mm' in US Eastern. Overrides `date`.",
+    ),
 ):
     """Get Gann Square of 9 levels for a ticker."""
     try:
         ticker = ticker.upper()
+
+        # Resolve the requested instant. `datetime` wins; `date` means 16:00 ET.
+        when = None
+        try:
+            if datetime_et:
+                when = parse_et_datetime(datetime_et)
+            elif date:
+                when = parse_et_datetime(f"{date}T16:00")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
         # Implement more robust handling with retries
         max_retries = 3
         retry_delay = 2  # seconds
 
         # The stored-levels cache only applies to "current" (no date) lookups
-        if not recalculate and not date and firestore_available:
+        if not recalculate and when is None and firestore_available:
             try:
                 levels = get_gann_levels(ticker)
                 if levels is not None:
@@ -205,7 +312,7 @@ async def get_levels_for_ticker(
         for attempt in range(max_retries):
             try:
                 # Try to calculate levels
-                levels = calculate_levels_for_ticker(ticker, date=date)
+                levels = calculate_levels_for_ticker(ticker, when=when)
 
                 if levels is not None:
                     return levels

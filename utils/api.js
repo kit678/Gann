@@ -23,14 +23,6 @@ const mockResponses = {
     },
     declination: 23.5 * Math.sin((new Date().getMonth() + 10) / 12 * Math.PI * 2)
   },
-  levels: {
-    levels: [
-      { price: 180.5, type: 'support', strength: 'strong' },
-      { price: 175.25, type: 'support', strength: 'medium' },
-      { price: 185.75, type: 'resistance', strength: 'medium' },
-      { price: 190.0, type: 'resistance', strength: 'strong' },
-    ]
-  },
   breaches: {
     breaches: []
   }
@@ -51,10 +43,6 @@ api.interceptors.response.use(
     
     if (url.includes('/api/sun')) {
       return Promise.resolve({ data: mockResponses.sun });
-    }
-    
-    if (url.includes('/api/levels')) {
-      return Promise.resolve({ data: mockResponses.levels });
     }
     
     if (url.includes('/api/breaches')) {
@@ -242,11 +230,22 @@ export const removeTicker = async (ticker) => {
   }
 };
 
+// Celestial positions (Sun + Moon)
+export const getCelestial = async (datetimeEt = null) => {
+  const params = {};
+  if (datetimeEt) params.datetime = datetimeEt;
+  const response = await api.get('/api/celestial', { params });
+  return response.data;
+};
+
 // Gann Levels
-export const getLevelsForTicker = async (ticker, { recalculate = false, date = null } = {}) => {
+export const getLevelsForTicker = async (
+  ticker,
+  { recalculate = false, datetime = null } = {}
+) => {
   try {
     const params = { recalculate };
-    if (date) params.date = date;
+    if (datetime) params.datetime = datetime;
     const response = await api.get(`/api/levels/${ticker}`, { params });
     return response.data;
   } catch (error) {

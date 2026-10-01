@@ -1,27 +1,54 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import GannSquareChart from '../components/GannSquareChart';
-import { getLevelsForTicker } from '../utils/api';
+import LevelLadderTable from '../components/LevelLadderTable';
+import { getLevelsForTicker, getCelestial } from '../utils/api';
+import { ZERO_DEGREE_PRESETS, DEFAULT_ZERO_DEGREE_OFFSET } from '../utils/gannGrid';
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+/**
+ * Current wall-clock time in US Eastern, as 'YYYY-MM-DDTHH:mm'. Used as the
+ * max for the picker, which is itself labelled and interpreted as ET - using
+ * the browser's local zone here would wrongly block or allow times depending
+ * on where the user happens to be.
+ */
+const nowEasternInput = () => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(new Date());
+  const get = (type) => parts.find((p) => p.type === type).value;
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+};
 
 const GannChartTest = () => {
   const [ticker, setTicker] = useState('AAPL');
   const [tickerInput, setTickerInput] = useState('AAPL');
-  const [selectedDate, setSelectedDate] = useState(''); // '' = live price, else 'YYYY-MM-DD'
+  const [selectedDateTime, setSelectedDateTime] = useState(''); // '' = live
   const [levelsData, setLevelsData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [cellSize, setCellSize] = useState(40);
   const [highlightSpokes, setHighlightSpokes] = useState(true);
+  const [showSun, setShowSun] = useState(true);
+  const [showMoon, setShowMoon] = useState(true);
+  const [chartLevels, setChartLevels] = useState(null);
+  const [zeroDegreeOffset, setZeroDegreeOffset] = useState(DEFAULT_ZERO_DEGREE_OFFSET);
+  // Whether this ticker's price is scaled x10 before being plotted. Which one
+  // reads better is judged per ticker by eye, so it stays a manual choice.
+  const [multiplyBy10, setMultiplyBy10] = useState(true);
+  const [ladders, setLadders] = useState(null);
+  const [markCount, setMarkCount] = useState(8);
+  const [showLadder, setShowLadder] = useState(false);
 
-  const fetchLevels = useCallback(async (tickerSymbol, date) => {
+  // Live-polled positions. Null means "use whatever came back with the price".
+  const [livePositions, setLivePositions] = useState(null);
+
+  const fetchLevels = useCallback(async (tickerSymbol, datetime) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getLevelsForTicker(tickerSymbol, { date: date || null });
-      // Guard against malformed/unexpected response shapes (e.g. the shared
-      // API client's offline mock fallback, which has a different shape).
+      const data = await getLevelsForTicker(tickerSymbol, { datetime: datetime || null });
       if (!data || typeof data.price !== 'number' || typeof data.sun_angle !== 'number') {
         throw new Error('Unexpected response from levels API');
       }
@@ -30,17 +57,57 @@ const GannChartTest = () => {
       setLevelsData(null);
       setError(
         err?.response?.data?.detail ||
-        `Could not fetch price for ${tickerSymbol}${date ? ` on ${date}` : ''}.`
+        `Could not fetch price for ${tickerSymbol}${datetime ? ` at ${datetime}` : ''}.`
       );
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Fetch whenever the confirmed ticker or date changes
   useEffect(() => {
-    fetchLevels(ticker, selectedDate);
-  }, [ticker, selectedDate, fetchLevels]);
+    fetchLevels(ticker, selectedDateTime);
+  }, [ticker, selectedDateTime, fetchLevels]);
+
+  // Poll the ephemeris in live mode only. This is a local calculation on the
+  // server, so it costs nothing and cannot be rate-limited - unlike the price
+  // feed, which is deliberately not polled.
+  useEffect(() => {
+    if (selectedDateTime) {
+      setLivePositions(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const tick = async () => {
+      try {
+        const data = await getCelestial();
+        if (cancelled) return;
+        setLivePositions((previous) => {
+          const nextSun = Math.round(data.sun.angle);
+          const nextMoon = Math.round(data.moon.angle);
+          if (previous && previous.sunDegree === nextSun && previous.moonDegree === nextMoon) {
+            return { ...previous, datetimeEt: data.datetime_et }; // Square unchanged, but the clock still ticks.
+          }
+          return {
+            sunDegree: nextSun, moonDegree: nextMoon, sun: data.sun, moon: data.moon,
+            datetimeEt: data.datetime_et,
+          };
+        });
+      } catch (err) {
+        // A dropped poll must not clear the chart. Keep the last known
+        // positions and try again on the next tick.
+        console.warn('Celestial poll failed, keeping last known positions:', err.message);
+      }
+    };
+
+    tick();
+    const id = setInterval(tick, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [selectedDateTime]);
 
   const handleTickerSubmit = (e) => {
     e.preventDefault();
@@ -48,16 +115,43 @@ const GannChartTest = () => {
     if (cleaned) setTicker(cleaned);
   };
 
-  // Price -> integer grid target. Multiplying by 10 preserves one decimal
-  // of price precision when mapping into the Gann Square's integer spiral.
-  const targetNumber = levelsData ? Math.round(levelsData.price * 10) : 810;
-  const sunDegree = levelsData ? Math.round(levelsData.sun_angle) : 71;
+  // Price -> integer grid square. The optional x10 preserves one decimal of
+  // price, which tightens the ring the price sits in.
+  const priceScale = multiplyBy10 ? 10 : 1;
+  const targetNumber = levelsData ? Math.round(levelsData.price * priceScale) : 81 * priceScale;
+
+  const sunDegree = livePositions
+    ? livePositions.sunDegree
+    : levelsData
+      ? Math.round(levelsData.sun_angle)
+      : 71;
+
+  const moonDegree = livePositions
+    ? livePositions.moonDegree
+    : levelsData && levelsData.moon_position
+      ? Math.round(levelsData.moon_position.angle)
+      : null;
+
+  const sunDetail = livePositions ? livePositions.sun : levelsData?.sun_position;
+  const moonDetail = livePositions ? livePositions.moon : levelsData?.moon_position;
+
+  // What instant the grid's Sun/Moon squares were actually computed from.
+  const gridDatetimeLabel = selectedDateTime
+    ? `${selectedDateTime.replace('T', ' ')} ET (historical)`
+    : livePositions?.datetimeEt
+      ? `${livePositions.datetimeEt} ET (live)`
+      : 'Loading current time…';
 
   return (
     <Layout>
       <div className="container mt-4">
         <div className="card mb-4">
           <div className="card-body">
+            <div className="mb-3">
+              <strong className="me-2">Grid reflects:</strong>
+              <span className="badge bg-info text-dark">{gridDatetimeLabel}</span>
+            </div>
+
             <div className="row align-items-end g-3">
               <div className="col-md-3">
                 <form onSubmit={handleTickerSubmit}>
@@ -76,23 +170,25 @@ const GannChartTest = () => {
                 </form>
               </div>
 
-              <div className="col-md-3">
-                <label htmlFor="priceDate" className="form-label mb-1 d-block">Price Date:</label>
+              <div className="col-md-4">
+                <label htmlFor="priceDateTime" className="form-label mb-1 d-block">
+                  Date &amp; time <span className="text-muted">(ET)</span>:
+                </label>
                 <div className="d-flex align-items-center">
                   <input
-                    type="date"
-                    id="priceDate"
+                    type="datetime-local"
+                    id="priceDateTime"
                     className="form-control"
-                    value={selectedDate}
-                    max={todayStr()}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    style={{ maxWidth: '160px' }}
+                    value={selectedDateTime}
+                    max={nowEasternInput()}
+                    onChange={(e) => setSelectedDateTime(e.target.value)}
+                    style={{ maxWidth: '220px' }}
                   />
-                  {selectedDate && (
+                  {selectedDateTime && (
                     <button
                       type="button"
                       className="btn btn-outline-secondary btn-sm ms-2"
-                      onClick={() => setSelectedDate('')}
+                      onClick={() => setSelectedDateTime('')}
                     >
                       Use live
                     </button>
@@ -114,30 +210,88 @@ const GannChartTest = () => {
                 />
               </div>
 
-              <div className="col-md-2">
-                <div className="form-check">
+              <div className="col-md-3">
+                <label htmlFor="zeroDegreeOffset" className="form-label mb-1 d-block">
+                  0° line <span className="text-muted">(square offset)</span>:
+                </label>
+                <div className="d-flex align-items-center">
                   <input
-                    className="form-check-input"
-                    type="checkbox"
-                    id="highlightSpokes"
-                    checked={highlightSpokes}
-                    onChange={(e) => setHighlightSpokes(e.target.checked)}
+                    type="number"
+                    className="form-control"
+                    id="zeroDegreeOffset"
+                    value={zeroDegreeOffset}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      setZeroDegreeOffset(Number.isFinite(n) ? n : 0);
+                    }}
+                    style={{ maxWidth: '90px' }}
                   />
-                  <label className="form-check-label" htmlFor="highlightSpokes">
-                    Highlight Spokes
-                  </label>
+                  <span className="ms-2 text-muted" style={{ fontSize: '0.8rem' }}>
+                    {zeroDegreeOffset === ZERO_DEGREE_PRESETS.oddSquare
+                      ? '0° → 361 (odd-square line)'
+                      : zeroDegreeOffset === ZERO_DEGREE_PRESETS.legacy
+                        ? '0° → 360 (legacy)'
+                        : `0° → ${360 + zeroDegreeOffset}`}
+                  </span>
                 </div>
               </div>
 
               <div className="col-md-2">
-                <strong className="me-2">Target:</strong>
-                <span className="badge bg-primary">{targetNumber}</span>
+                <label htmlFor="markCount" className="form-label mb-1 d-block">
+                  Marks <span className="text-muted">(each way)</span>:
+                </label>
+                <input
+                  type="number"
+                  className="form-control"
+                  id="markCount"
+                  value={markCount}
+                  min="1"
+                  max="64"
+                  onChange={(e) => {
+                    const n = parseInt(e.target.value, 10);
+                    setMarkCount(Number.isFinite(n) && n > 0 ? n : 8);
+                  }}
+                  style={{ maxWidth: '90px' }}
+                />
+              </div>
+
+              <div className="col-md-3">
+                <div className="form-check">
+                  <input className="form-check-input" type="checkbox" id="showSun"
+                         checked={showSun} onChange={(e) => setShowSun(e.target.checked)} />
+                  <label className="form-check-label" htmlFor="showSun">Show Sun</label>
+                </div>
+                <div className="form-check">
+                  <input className="form-check-input" type="checkbox" id="showMoon"
+                         checked={showMoon} onChange={(e) => setShowMoon(e.target.checked)} />
+                  <label className="form-check-label" htmlFor="showMoon">Show Moon</label>
+                </div>
+                <div className="form-check">
+                  <input className="form-check-input" type="checkbox" id="multiplyBy10"
+                         checked={multiplyBy10}
+                         onChange={(e) => setMultiplyBy10(e.target.checked)} />
+                  <label className="form-check-label" htmlFor="multiplyBy10">
+                    Multiply price &times;10
+                  </label>
+                </div>
+                <div className="form-check">
+                  <input className="form-check-input" type="checkbox" id="highlightSpokes"
+                         checked={highlightSpokes}
+                         onChange={(e) => setHighlightSpokes(e.target.checked)} />
+                  <label className="form-check-label" htmlFor="highlightSpokes">
+                    Highlight Crosses
+                  </label>
+                </div>
               </div>
             </div>
 
             <div className="row mt-3">
-              <div className="col-md-8">
-                {loading && <span className="text-muted">Loading {ticker}{selectedDate ? ` for ${selectedDate}` : ''}...</span>}
+              <div className="col-12">
+                {loading && (
+                  <span className="text-muted">
+                    Loading {ticker}{selectedDateTime ? ` at ${selectedDateTime} ET` : ''}...
+                  </span>
+                )}
                 {!loading && error && <span className="text-danger">{error}</span>}
                 {!loading && !error && levelsData && (
                   <div className="d-flex flex-wrap align-items-center" style={{ gap: '1.5rem' }}>
@@ -149,27 +303,102 @@ const GannChartTest = () => {
                       <span className="ms-2 text-muted">
                         {levelsData.price_date ? `as of ${levelsData.price_date}` : '(live)'}
                       </span>
-                    </div>
-                    <div>
-                      <strong className="me-2">Sun Position:</strong>
-                      <span className="badge bg-warning text-dark">{sunDegree}°</span>
                       <span className="ms-2 text-muted">
-                        ({levelsData.sun_position?.zodiac_sign || 'N/A'} {Number(levelsData.sun_position?.degrees_in_sign ?? 0).toFixed(2)}°)
+                        → square {targetNumber}{multiplyBy10 ? ' (×10)' : ''}
                       </span>
                     </div>
+                    <div>
+                      <strong className="me-2">Sun:</strong>
+                      <span className="badge bg-warning text-dark">{sunDegree}°</span>
+                      <span className="ms-2 text-muted">
+                        ({sunDetail?.zodiac_sign || 'N/A'}{' '}
+                        {Number(sunDetail?.degrees_in_sign ?? 0).toFixed(2)}°)
+                      </span>
+                    </div>
+                    {moonDegree !== null && (
+                      <div>
+                        <strong className="me-2">Moon:</strong>
+                        <span className="badge bg-secondary">{moonDegree}°</span>
+                        <span className="ms-2 text-muted">
+                          ({moonDetail?.zodiac_sign || 'N/A'}{' '}
+                          {Number(moonDetail?.degrees_in_sign ?? 0).toFixed(2)}°)
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
+
+            {chartLevels && (
+              <div className="row mt-3">
+                <div className="col-12">
+                  {chartLevels.isConjunct && showSun && showMoon ? (
+                    <div className="text-muted mb-1">
+                      Sun and Moon are conjunct — both bodies give the same levels.
+                    </div>
+                  ) : null}
+                  {showSun && (
+                    <div>
+                      <strong className="me-2">Sun levels —</strong>
+                      <span className="text-success me-3">Up: {chartLevels.sun.up.join(', ') || 'none'}</span>
+                      <span className="text-danger">Down: {chartLevels.sun.down.join(', ') || 'none'}</span>
+                    </div>
+                  )}
+                  {showMoon && (chartLevels.moon.up.length > 0 || chartLevels.moon.down.length > 0) && (
+                    <div>
+                      <strong className="me-2">Moon levels —</strong>
+                      <span className="text-success me-3">Up: {chartLevels.moon.up.join(', ') || 'none'}</span>
+                      <span className="text-danger">Down: {chartLevels.moon.down.join(', ') || 'none'}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         <GannSquareChart
           targetNumber={targetNumber}
           sunPosition={sunDegree}
+          moonPosition={moonDegree}
+          showSun={showSun}
+          showMoon={showMoon}
           cellSize={cellSize}
           highlightSpokes={highlightSpokes}
+          zeroDegreeOffset={zeroDegreeOffset}
+          priceScale={priceScale}
+          markCount={markCount}
+          onLevelsChange={setChartLevels}
+          onLaddersChange={setLadders}
         />
+
+        {ladders && (
+          <div className="card mt-4">
+            <div className="card-body">
+              <div className="d-flex align-items-center justify-content-between mb-2">
+                <strong>Level ladder</strong>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => setShowLadder((v) => !v)}
+                >
+                  {showLadder ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              {showLadder && (
+                <LevelLadderTable
+                  ladders={[
+                    ladders.center,
+                    showSun ? ladders.sun : [],
+                    showMoon ? ladders.moon : [],
+                  ]}
+                  price={levelsData ? levelsData.price : null}
+                />
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );
