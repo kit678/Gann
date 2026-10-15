@@ -50,6 +50,19 @@ describe('spiralOffset (clockwise, x right, y down)', () => {
     });
   });
 
+  test('anticlockwise mirrors the existing engine on every cell', () => {
+    const grid = buildGannSquare(5000, 1);
+    const c = (grid.dimension - 1) / 2;
+    grid.positionSequence.forEach((p) => {
+      expect(spiralOffset(p.value, false)).toEqual({ x: -(p.col - c) || 0, y: p.row - c });
+    });
+  });
+
+  test('stays exact at ring boundaries for very large n', () => {
+    expect(spiralOffset(20001 ** 2)).toEqual({ x: -10000, y: 10000 });
+    expect(spiralOffset(20001 ** 2 + 1)).toEqual({ x: -10001, y: 10000 });
+  });
+
   test('rejects an index that is not a positive integer', () => {
     expect(() => spiralOffset(0)).toThrow(RangeError);
     expect(() => spiralOffset(2.5)).toThrow(RangeError);
