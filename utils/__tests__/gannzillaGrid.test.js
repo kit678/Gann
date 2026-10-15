@@ -116,4 +116,17 @@ describe('findCell', () => {
   test('tolerates floating-point noise in decimal increments', () => {
     expect(findCell(0.3, { value: 0.1, increment: 0.1 })).toBe(3);
   });
+
+  test('returns null for non-finite input or a non-positive increment', () => {
+    expect(findCell(NaN)).toBeNull();
+    expect(findCell(Infinity)).toBeNull();
+    expect(findCell(5, { value: NaN })).toBeNull();
+    expect(findCell(5, { increment: 0 })).toBeNull();
+    expect(findCell(5, { increment: -1 })).toBeNull();
+  });
+
+  test('hits every cell exactly on a decimal grid', () => {
+    const g = { value: 20000, increment: 0.05 };
+    for (let n = 1; n <= 2000; n++) expect(findCell(cellValue(n, g), g)).toBe(n);
+  });
 });

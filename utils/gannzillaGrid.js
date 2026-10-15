@@ -66,6 +66,7 @@ export function cellValue(n, { value = 1, increment = 1 } = {}) {
 export function findCell(target, { value = 1, increment = 1 } = {}) {
   if (!(increment > 0)) return null;
   const raw = (target - value) / increment + 1;
+  if (!Number.isFinite(raw)) return null;
   // Snap float noise (0.3 / 0.1 = 2.9999999999999996) before flooring.
   const snapped = Math.abs(raw - Math.round(raw)) < 1e-9 ? Math.round(raw) : raw;
   const n = Math.floor(snapped);
