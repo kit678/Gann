@@ -1,8 +1,9 @@
 import {
-  mod360, separation, delta, priceToDegree, longitudeToPrice, summary, average,
+  mod360, separation, delta, priceToDegree, longitudeToPrice, summary, average, DEFAULT_ASPECTS, findAspect,
 } from '../gannzillaAstro';
 import {
   DOW_PRICE, DOW_PLANETS, DOW_SUMMARY, DOW_AVERAGE, RADIX_TRANSIT, RADIX_TRANSIT_2026, DOW_MARKET_X10,
+  INSPECTOR_ASPECTS, INSPECTOR_PLAIN,
 } from './fixtures/gannzillaDocs';
 
 describe('angle helpers', () => {
@@ -83,5 +84,37 @@ describe('scale edge cases', () => {
     expect(() => priceToDegree(100, { divisor: 0 })).toThrow(RangeError);
     expect(() => longitudeToPrice(10, 100, { multiplier: 0 })).toThrow(RangeError);
     expect(() => longitudeToPrice(10, 100, { multiplier: -1 })).toThrow(RangeError);
+  });
+});
+
+describe('findAspect with the desktop defaults (extract aspects table, #17-18)', () => {
+  test('has the nine desktop aspects', () => {
+    expect(DEFAULT_ASPECTS.map((a) => a.angle)).toEqual([0, 30, 45, 60, 90, 120, 135, 150, 180]);
+  });
+
+  INSPECTOR_ASPECTS.forEach(({ a, b, aspect }) => {
+    test(`${a} vs ${b} is a ${aspect}`, () => {
+      expect(findAspect(a, b).name).toBe(aspect);
+    });
+  });
+
+  INSPECTOR_PLAIN.forEach(({ a, b }) => {
+    test(`${a} vs ${b} is no aspect`, () => {
+      expect(findAspect(a, b)).toBeNull();
+    });
+  });
+
+  test('the orb edge counts (89 deg is a square with a 1 deg orb)', () => {
+    expect(findAspect(0, 89).name).toBe('Square');
+    expect(findAspect(0, 88.9)).toBeNull();
+  });
+
+  test('conjunction has a 5 deg orb, wrapping through 0', () => {
+    expect(findAspect(358, 3).name).toBe('Conjunction');
+  });
+
+  test('accepts a custom aspect table', () => {
+    const only = [{ name: 'Trine', angle: 120, orb: 8 }];
+    expect(findAspect(0, 113, only).name).toBe('Trine');
   });
 });

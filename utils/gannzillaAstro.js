@@ -58,3 +58,30 @@ export function average(longitudes) {
   if (longitudes.length === 0) return null;
   return longitudes.reduce((s, x) => s + x, 0) / longitudes.length;
 }
+
+/**
+ * Gannzilla desktop default aspects. Conjunction 5 deg orb, the rest 1 deg.
+ * (Gannzilla Web uses 5-6 deg orbs and only five aspects; the desktop guide
+ * wins.)
+ */
+export const DEFAULT_ASPECTS = [
+  { name: 'Conjunction', angle: 0, orb: 5 },
+  { name: 'Semisextile', angle: 30, orb: 1 },
+  { name: 'Semisquare', angle: 45, orb: 1 },
+  { name: 'Sextile', angle: 60, orb: 1 },
+  { name: 'Square', angle: 90, orb: 1 },
+  { name: 'Trine', angle: 120, orb: 1 },
+  { name: 'Sesquisquare', angle: 135, orb: 1 },
+  { name: 'Quincunx', angle: 150, orb: 1 },
+  { name: 'Opposition', angle: 180, orb: 1 },
+];
+
+/**
+ * The aspect two longitudes form, or null. The orb edge counts: the guide
+ * shows 89 deg as a Square under a 1 deg orb. A tiny epsilon absorbs float
+ * noise at the edge.
+ */
+export function findAspect(a, b, aspects = DEFAULT_ASPECTS) {
+  const sep = separation(a, b);
+  return aspects.find((asp) => Math.abs(sep - asp.angle) <= asp.orb + 1e-9) || null;
+}
