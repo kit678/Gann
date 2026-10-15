@@ -47,3 +47,27 @@ export function spiralOffset(n, clockwise = true) {
   // `|| 0` turns -0 into 0 so toEqual comparisons stay clean.
   return { x: (clockwise ? x : -x) || 0, y };
 }
+
+/**
+ * The number cell n displays. Gannzilla's Value is the centre cell and
+ * Increment is the step per cell; Increment may be negative.
+ */
+export function cellValue(n, { value = 1, increment = 1 } = {}) {
+  return value + (n - 1) * increment;
+}
+
+/**
+ * The cell Gannzilla's Find marks: the one with the largest value that does
+ * not exceed `target` (black-box finding [02]: with Value 1, Increment 3,
+ * Find 6.99 marks 4, not 7). Null when target is below the centre value.
+ *
+ * Positive increments only: negative-increment Find is untested.
+ */
+export function findCell(target, { value = 1, increment = 1 } = {}) {
+  if (!(increment > 0)) return null;
+  const raw = (target - value) / increment + 1;
+  // Snap float noise (0.3 / 0.1 = 2.9999999999999996) before flooring.
+  const snapped = Math.abs(raw - Math.round(raw)) < 1e-9 ? Math.round(raw) : raw;
+  const n = Math.floor(snapped);
+  return n < 1 ? null : n;
+}
