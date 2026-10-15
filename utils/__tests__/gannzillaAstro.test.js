@@ -117,4 +117,13 @@ describe('findAspect with the desktop defaults (extract aspects table, #17-18)',
     const only = [{ name: 'Trine', angle: 120, orb: 8 }];
     expect(findAspect(0, 113, only).name).toBe('Trine');
   });
+
+  test('picks the closest aspect when custom orbs overlap', () => {
+    const wide = [{ name: 'Semisquare', angle: 45, orb: 10 }, { name: 'Sextile', angle: 60, orb: 10 }];
+    expect(findAspect(0, 54, wide).name).toBe('Sextile');
+  });
+
+  test('float noise at the orb edge still counts', () => {
+    expect(findAspect(0.1, 89.1).name).toBe('Square');
+  });
 });

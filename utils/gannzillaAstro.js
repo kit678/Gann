@@ -2,7 +2,8 @@
  * Gannzilla-compatible price/planet maths.
  *
  * Every formula here is pinned by a worked example from the Gannzilla user
- * guide; see utils/__tests__/fixtures/gannzillaDocs.js.
+ * guide or the desktop black-box run (notes/gannzilla_blackbox_findings.md);
+ * see utils/__tests__/fixtures/gannzillaDocs.js.
  */
 
 /** Wrap any angle into [0, 360). */
@@ -77,11 +78,18 @@ export const DEFAULT_ASPECTS = [
 ];
 
 /**
- * The aspect two longitudes form, or null. The orb edge counts: the guide
- * shows 89 deg as a Square under a 1 deg orb. A tiny epsilon absorbs float
- * noise at the edge.
+ * The aspect two longitudes form (the closest one when orbs overlap), or null.
+ * Assumption: the orb edge counts (<=). The guide shows 89 deg as a Square
+ * under a 1 deg orb, but it rounds to whole degrees, so this is not proven.
+ * A tiny epsilon absorbs float noise. Angles above 180 never match, since
+ * separation is at most 180.
  */
 export function findAspect(a, b, aspects = DEFAULT_ASPECTS) {
   const sep = separation(a, b);
-  return aspects.find((asp) => Math.abs(sep - asp.angle) <= asp.orb + 1e-9) || null;
+  let best = null;
+  aspects.forEach((asp) => {
+    const gap = Math.abs(sep - asp.angle);
+    if (gap <= asp.orb + 1e-9 && (best === null || gap < Math.abs(sep - best.angle))) best = asp;
+  });
+  return best;
 }

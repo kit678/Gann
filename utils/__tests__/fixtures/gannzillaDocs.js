@@ -1,5 +1,5 @@
 /**
- * Worked examples from the Gannzilla user guide (https://gannzilla.com/docs/),
+ * Worked examples from the Gannzilla user guide and the desktop black-box run (https://gannzilla.com/docs/),
  * as extracted in notes/gannzilla_docs_extract.md. Comments cite "extract #N".
  * These are observed outputs of the real desktop app, so they are the ground
  * truth our functions must reproduce.
@@ -59,9 +59,9 @@ export const DOW_MARKET_X10 = [
 
 // extract #17-18: Inspector cells that show an aspect symbol.
 export const INSPECTOR_ASPECTS = [
-  { a: 220, b: 40, aspect: 'Opposition' }, // transit Moon vs transit Saturn
-  { a: 355, b: 84, aspect: 'Square' }, // radix Saturn vs radix Venus, 89 deg
-  { a: 247, b: 98, aspect: 'Quincunx' }, // radix Jupiter vs radix Sun, 149 deg
+  { a: 220, b: 40, aspect: 'Opposition' }, // radix Moon vs radix Saturn (2000)
+  { a: 355, b: 84, aspect: 'Square' }, // transit Saturn vs transit Venus (1995), 89 deg
+  { a: 247, b: 98, aspect: 'Quincunx' }, // transit Jupiter vs transit Sun (1995), 149 deg
 ];
 // extract #17-18: Inspector cells that show a plain number (no aspect).
 export const INSPECTOR_PLAIN = [
