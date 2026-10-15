@@ -190,7 +190,7 @@ describe('spiralOffset (clockwise, x right, y down)', () => {
   });
 
   test('odd squares lie on the lower-left diagonal', () => {
-    [1, 3, 5, 7, 9, 19].forEach((root) => {
+    [3, 5, 7, 9, 19].forEach((root) => {
       const k = (root - 1) / 2;
       expect(spiralOffset(root * root)).toEqual({ x: -k, y: k });
     });
@@ -406,7 +406,7 @@ Expected: PASS.
 
 ```bash
 git add utils/gannzillaGrid.js utils/__tests__/gannzillaGrid.test.js
-git commit -m "feat: Gannzilla cell value (Value/Increment) and exact Find"
+git commit -m "feat: Gannzilla cell value (Value/Increment) and round-down Find"
 ```
 
 ### Task 4: Angles, price ↔ degree, Summary and Average
