@@ -67,3 +67,21 @@ describe('Summary and Average (extract #11-12)', () => {
     expect(average([])).toBeNull();
   });
 });
+
+describe('scale edge cases', () => {
+  test('a price exactly on a 360 boundary starts that block', () => {
+    expect(longitudeToPrice(10, 720)).toBe(730);
+  });
+  test('divisor scales the block back', () => {
+    expect(longitudeToPrice(10, 800, { divisor: 2 })).toBeCloseTo(740, 6); // 800/2=400 -> block 360 -> (360+10)*2
+  });
+  test('wraps longitudes outside 0..360', () => {
+    expect(longitudeToPrice(370, 0)).toBe(10);
+    expect(longitudeToPrice(-10, 0)).toBe(350);
+  });
+  test('rejects a zero or negative multiplier or divisor', () => {
+    expect(() => priceToDegree(100, { divisor: 0 })).toThrow(RangeError);
+    expect(() => longitudeToPrice(10, 100, { multiplier: 0 })).toThrow(RangeError);
+    expect(() => longitudeToPrice(10, 100, { multiplier: -1 })).toThrow(RangeError);
+  });
+});

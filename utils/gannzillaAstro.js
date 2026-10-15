@@ -10,6 +10,13 @@ export function mod360(deg) {
   return ((deg % 360) + 360) % 360;
 }
 
+/** Gannzilla's x and / price fields must be positive; anything else has no meaning. */
+function checkScale(multiplier, divisor) {
+  if (!(multiplier > 0) || !(divisor > 0)) {
+    throw new RangeError(`multiplier and divisor must be positive, got ${multiplier} and ${divisor}`);
+  }
+}
+
 /** Shortest arc between two longitudes, 0..180 (the Inspector's number). */
 export function separation(a, b) {
   const d = mod360(a - b);
@@ -23,6 +30,7 @@ export function delta(radix, transit) {
 
 /** A price as a degree on the wheel: (price x multiplier / divisor) mod 360. */
 export function priceToDegree(price, { multiplier = 1, divisor = 1 } = {}) {
+  checkScale(multiplier, divisor);
   return mod360((price * multiplier) / divisor);
 }
 
@@ -32,6 +40,7 @@ export function priceToDegree(price, { multiplier = 1, divisor = 1 } = {}) {
  * the nearest block - then scales the level back (black-box [05], [06]).
  */
 export function longitudeToPrice(longitude, price, { multiplier = 1, divisor = 1 } = {}) {
+  checkScale(multiplier, divisor);
   const scaled = (price * multiplier) / divisor;
   return ((Math.floor(scaled / 360) * 360 + mod360(longitude)) * divisor) / multiplier;
 }
