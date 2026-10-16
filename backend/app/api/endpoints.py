@@ -212,7 +212,7 @@ async def get_planet_positions(
                 when = gannzilla_local_to_utc(naive, city)
         else:
             when = parse_et_datetime(datetime_local) if datetime_local is not None else datetime.now(EASTERN)
-    except ValueError as e:
+    except (ValueError, OverflowError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     try:
@@ -222,6 +222,8 @@ async def get_planet_positions(
             "time_mode": time_mode,
             "bodies": calculate_all_positions(when, heliocentric=(system == "heliocentric")),
         }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error computing planet positions: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

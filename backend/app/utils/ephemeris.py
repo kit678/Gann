@@ -6,6 +6,7 @@ and other celestial bodies using the Swiss Ephemeris library.
 """
 
 import os
+import threading
 import swisseph as swe
 import datetime
 from typing import Dict, Any, Tuple
@@ -18,6 +19,7 @@ EPHE_PATH = os.environ.get(
     "SE_EPHE_PATH",
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "ephe")),
 )
+SUPPORTED_YEARS = (1800, 2399)  # range covered by the bundled *_18.se1 files
 
 # Gannzilla's twelve bodies, in its planet-table order.
 BODIES = {
@@ -39,12 +41,19 @@ BODIES = {
 _NOT_HELIOCENTRIC = ("Sun", "Moon")
 
 
+# swisseph keeps its data path per thread, and FastAPI runs sync code in worker threads, so initialise once per thread, not once per process.
+_thread_state = threading.local()
+
+
 def initialize_ephemeris() -> None:
     """Initialize the Swiss Ephemeris library."""
+    if getattr(_thread_state, "initialized", False):
+        return
     swe.set_ephe_path(EPHE_PATH)
 
     # Use the tropical zodiac (default)
     swe.set_sid_mode(swe.SIDM_FAGAN_BRADLEY)
+    _thread_state.initialized = True
 
 
 def _to_utc(when: datetime.datetime = None) -> datetime.datetime:
@@ -87,6 +96,11 @@ def calculate_body_position(
     initialize_ephemeris()
 
     when = _to_utc(when)
+    if not SUPPORTED_YEARS[0] <= when.year <= SUPPORTED_YEARS[1]:
+        raise ValueError(
+            f"Date {when:%Y-%m-%d} is outside the supported range "
+            f"{SUPPORTED_YEARS[0]}-{SUPPORTED_YEARS[1]}."
+        )
 
     jd = swe.julday(
         when.year,

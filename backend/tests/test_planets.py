@@ -8,6 +8,7 @@ Expected longitudes come from the Gannzilla user guide's planet table
 
 import sys
 import os
+import threading
 import unittest
 from datetime import datetime, timezone
 
@@ -36,6 +37,22 @@ class TestEphemerisFiles(unittest.TestCase):
     def test_eris_is_computed_from_data_files(self):
         result = calculate_body_position(swe.AST_OFFSET + 136199, self.WHEN)
         self.assertAlmostEqual(result["longitude"], 18.60, delta=0.03)
+
+    def test_ceres_works_in_a_fresh_thread(self):
+        """swisseph keeps its data path per thread; FastAPI uses worker threads."""
+        out = []
+
+        def run():
+            try:
+                out.append(calculate_body_position(swe.CERES, self.WHEN))
+            except Exception as e:
+                out.append(e)
+
+        t = threading.Thread(target=run)
+        t.start()
+        t.join()
+        self.assertNotIsInstance(out[0], Exception, out[0])
+        self.assertAlmostEqual(out[0]["longitude"], 184.40, delta=0.03)
 
 
 class TestAllBodies(unittest.TestCase):
@@ -168,6 +185,24 @@ class TestPlanetsEndpoint(unittest.TestCase):
         ):
             with self.subTest(params=params):
                 self.assertEqual(client.get("/api/planets", params=params).status_code, 400)
+
+
+    def test_out_of_range_dates_are_400_without_leaking_paths(self):
+        for params in (
+            {"datetime": "1000-01-01T00:00"},
+            {"datetime": "0001-01-01T00:00", "time_mode": "gannzilla", "city": "Tokyo"},
+        ):
+            with self.subTest(params=params):
+                response = client.get("/api/planets", params=params)
+                self.assertEqual(response.status_code, 400)
+                self.assertNotIn("ephe", response.json()["detail"])
+
+    def test_gannzilla_mode_ignores_dst_in_summer(self):
+        """2026-07-15 00:00 New York is EDT in reality; Gannzilla still uses UTC-5."""
+        response = client.get("/api/planets", params={
+            "datetime": "2026-07-15T00:00", "time_mode": "gannzilla", "city": "New York",
+        })
+        self.assertEqual(response.json()["datetime_utc"], "2026-07-15T05:00:00Z")
 
 
 if __name__ == "__main__":
