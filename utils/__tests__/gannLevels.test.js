@@ -364,3 +364,21 @@ describe('buildLadder', () => {
     expect(segmentStarts.has(24)).toBe(false); // no merged 25-31 span
   });
 });
+
+describe('buildLadder toPrice', () => {
+  test('maps every level square through toPrice when given', () => {
+    const grid = buildGannSquare(3099, 152);
+    const centre = { row: (grid.dimension - 1) / 2, col: (grid.dimension - 1) / 2 };
+    const toPrice = (square) => 0.1 + (square - 1) * 0.1;
+    const levels = buildLadder({ grid, crossCentre: centre, source: 'center', toPrice });
+    expect(levels.length).toBeGreaterThan(0);
+    levels.forEach((l) => expect(l.price).toBeCloseTo(toPrice(l.square), 9));
+  });
+
+  test('defaults to square / scale when toPrice is absent', () => {
+    const grid = buildGannSquare(3099, 152);
+    const centre = { row: (grid.dimension - 1) / 2, col: (grid.dimension - 1) / 2 };
+    const levels = buildLadder({ grid, crossCentre: centre, source: 'center', scale: 10 });
+    levels.forEach((l) => expect(l.price).toBeCloseTo(l.square / 10, 9));
+  });
+});
