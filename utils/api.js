@@ -238,6 +238,21 @@ export const getCelestial = async (datetimeEt = null) => {
   return response.data;
 };
 
+/**
+ * Gannzilla time tools: cycles, moon octant phases and the next eclipses.
+ * `datetime` is wall-clock time in `city`, read with Gannzilla's fixed
+ * standard offset (no daylight saving).
+ */
+export const getTimeTools = async ({
+  datetime = null, city = 'New York', reverse = true,
+  tetragram = 'Sun', pentagram = 'Sun', hexagram = 'Sun',
+} = {}) => {
+  const params = { city, reverse, tetragram, pentagram, hexagram };
+  if (datetime) params.datetime = datetime;
+  const response = await api.get('/api/time-tools', { params });
+  return response.data;
+};
+
 // Gann Levels
 export const getLevelsForTicker = async (
   ticker,
