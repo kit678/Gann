@@ -3,9 +3,13 @@ import Layout from '../components/Layout';
 import GannSquareChart from '../components/GannSquareChart';
 import LevelLadderTable from '../components/LevelLadderTable';
 import TimeToolsPanel from '../components/TimeToolsPanel';
+import CosmogramPanel from '../components/CosmogramPanel';
 import { getLevelsForTicker, getCelestial } from '../utils/api';
 import { ZERO_DEGREE_PRESETS, DEFAULT_ZERO_DEGREE_OFFSET } from '../utils/gannGrid';
 import { nearestCell } from '../utils/gannzillaGrid';
+
+// Stable empty list, so hiding projections doesn't hand the chart a new array every render.
+const NO_PROJECTIONS = [];
 
 /**
  * Current wall-clock time in US Eastern, as 'YYYY-MM-DDTHH:mm'. Used as the
@@ -43,6 +47,9 @@ const GannChartTest = () => {
   const [gridIncrementInput, setGridIncrementInput] = useState('0.1');
   const [clockwise, setClockwise] = useState(true);
   const [findInput, setFindInput] = useState('');
+  // Every body's longitude, reported by the Cosmogram, for grid projections.
+  const [projections, setProjections] = useState([]);
+  const [showProjections, setShowProjections] = useState(true);
   const [ladders, setLadders] = useState(null);
   const [markCount, setMarkCount] = useState(8);
   const [showLadder, setShowLadder] = useState(false);
@@ -282,6 +289,14 @@ const GannChartTest = () => {
                   <label className="form-check-label" htmlFor="showMoon">Show Moon</label>
                 </div>
                 <div className="form-check">
+                  <input className="form-check-input" type="checkbox" id="showProjections"
+                         checked={showProjections}
+                         onChange={(e) => setShowProjections(e.target.checked)} />
+                  <label className="form-check-label" htmlFor="showProjections">
+                    Planet projections
+                  </label>
+                </div>
+                <div className="form-check">
                   <input className="form-check-input" type="checkbox" id="clockwise"
                          checked={clockwise} onChange={(e) => setClockwise(e.target.checked)} />
                   <label className="form-check-label" htmlFor="clockwise">Clockwise</label>
@@ -410,6 +425,7 @@ const GannChartTest = () => {
           gridIncrement={gridIncrement}
           clockwise={clockwise}
           findValue={findValue}
+          projections={showProjections ? projections : NO_PROJECTIONS}
           markCount={markCount}
           onLevelsChange={setChartLevels}
           onLaddersChange={setLadders}
@@ -445,6 +461,12 @@ const GannChartTest = () => {
 
         {/* The picker's ET wall-clock time doubles as Gannzilla's New York
             base time (Gannzilla ignores daylight saving). */}
+        <CosmogramPanel
+          datetime={selectedDateTime || null}
+          price={levelsData ? Number(levelsData.price) : null}
+          onBodiesChange={setProjections}
+        />
+
         <TimeToolsPanel datetime={selectedDateTime || null} />
       </div>
     </Layout>
