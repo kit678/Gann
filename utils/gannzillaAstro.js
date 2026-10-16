@@ -93,3 +93,23 @@ export function findAspect(a, b, aspects = DEFAULT_ASPECTS) {
   });
   return best;
 }
+
+/**
+ * Gannzilla's Inspector: an n x n table of separations between two lists of
+ * longitudes in the same body order (extract #16-#18, with the radix and
+ * transit columns corrected by the black-box run). Row i, column j:
+ * - i = j: radix i vs transit i (the only true radix-vs-transit cells)
+ * - i < j, above the diagonal: radix i vs radix j
+ * - i > j, below the diagonal: transit i vs transit j
+ * Each cell is { value: shortest arc 0..180, aspect: findAspect() or null }.
+ */
+export function inspectorTable(radix, transit, aspects = DEFAULT_ASPECTS) {
+  return radix.map((_, i) => radix.map((__, j) => {
+    let a;
+    let b;
+    if (i === j) [a, b] = [radix[i], transit[i]];
+    else if (i < j) [a, b] = [radix[i], radix[j]];
+    else [a, b] = [transit[i], transit[j]];
+    return { value: separation(a, b), aspect: findAspect(a, b, aspects) };
+  }));
+}
