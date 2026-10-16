@@ -35,10 +35,12 @@ const LayoutViewer = ({ gridValue = 1, gridIncrement = 1, clockwise = true, pric
   const extent = cells.reduce((m, c) => Math.max(m, Math.abs(c.x), Math.abs(c.y)), 1);
   const isTable = view === 'permanent';
   const unit = isTable ? (SIZE - 40) / rings : (SIZE / 2 - 30) / (extent + 0.5);
+  // Rounded to 0.01 px so server and browser render identical attributes.
+  const round = (v) => Math.round(v * 100) / 100;
   const toScreen = (c) => (isTable
-    ? { x: 20 + (c.x + 0.5) * unit, y: 20 + (c.y + 0.5) * unit }
-    : { x: SIZE / 2 + c.x * unit, y: SIZE / 2 + c.y * unit });
-  const fontSize = Math.max(6, Math.min(13, unit * 0.32));
+    ? { x: round(20 + (c.x + 0.5) * unit), y: round(20 + (c.y + 0.5) * unit) }
+    : { x: round(SIZE / 2 + c.x * unit), y: round(SIZE / 2 + c.y * unit) });
+  const fontSize = Math.round(Math.max(6, Math.min(13, unit * 0.32)) * 100) / 100;
 
   return (
     <div className="card mt-4">
@@ -52,7 +54,7 @@ const LayoutViewer = ({ gridValue = 1, gridIncrement = 1, clockwise = true, pric
           <label className="small mb-0" htmlFor="layoutRings">{isTable ? 'Size' : 'Rings'}</label>
           <input type="number" id="layoutRings" className="form-control form-control-sm"
                  style={{ width: '5rem' }} min="1" max="40" value={rings}
-                 onChange={(e) => setRings(Math.max(1, Math.min(40, Number(e.target.value) || 1)))} />
+                 onChange={(e) => setRings(Math.max(1, Math.min(40, Math.floor(Number(e.target.value)) || 1)))} />
           <span className="text-muted small">
             Uses the Value, Increment, Clockwise and Find settings above.
             {layoutCellCount(view, rings) > MAX_CELLS && ` Showing the first ${MAX_CELLS} cells.`}
@@ -74,7 +76,7 @@ const LayoutViewer = ({ gridValue = 1, gridIncrement = 1, clockwise = true, pric
             return (
               <g key={c.n}>
                 {(isPrice || isFind) && (
-                  <circle cx={p.x} cy={p.y} r={Math.max(6, unit * 0.45)}
+                  <circle cx={p.x} cy={p.y} r={Math.round(Math.max(6, unit * 0.45) * 100) / 100}
                           fill={isPrice ? 'rgba(255,165,0,0.45)' : 'none'}
                           stroke={isFind ? '#141414' : 'rgba(255,165,0,1)'} strokeWidth={isFind ? 2.5 : 1.5} />
                 )}
