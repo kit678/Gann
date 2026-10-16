@@ -4,6 +4,7 @@ import GannSquareChart from '../components/GannSquareChart';
 import LevelLadderTable from '../components/LevelLadderTable';
 import { getLevelsForTicker, getCelestial } from '../utils/api';
 import { ZERO_DEGREE_PRESETS, DEFAULT_ZERO_DEGREE_OFFSET } from '../utils/gannGrid';
+import { nearestCell } from '../utils/gannzillaGrid';
 
 /**
  * Current wall-clock time in US Eastern, as 'YYYY-MM-DDTHH:mm'. Used as the
@@ -34,9 +35,13 @@ const GannChartTest = () => {
   const [showMoon, setShowMoon] = useState(true);
   const [chartLevels, setChartLevels] = useState(null);
   const [zeroDegreeOffset, setZeroDegreeOffset] = useState(DEFAULT_ZERO_DEGREE_OFFSET);
-  // Whether this ticker's price is scaled x10 before being plotted. Which one
-  // reads better is judged per ticker by eye, so it stays a manual choice.
-  const [multiplyBy10, setMultiplyBy10] = useState(true);
+  // Gannzilla's grid: the centre cell shows Value and each step adds
+  // Increment. 0.1 / 0.1 is the old "x10 on"; 1 / 1 is the old "x10 off".
+  // Which reads better is judged per ticker by eye, so it stays a manual choice.
+  const [gridValueInput, setGridValueInput] = useState('0.1');
+  const [gridIncrementInput, setGridIncrementInput] = useState('0.1');
+  const [clockwise, setClockwise] = useState(true);
+  const [findInput, setFindInput] = useState('');
   const [ladders, setLadders] = useState(null);
   const [markCount, setMarkCount] = useState(8);
   const [showLadder, setShowLadder] = useState(false);
@@ -115,10 +120,19 @@ const GannChartTest = () => {
     if (cleaned) setTicker(cleaned);
   };
 
-  // Price -> integer grid square. The optional x10 preserves one decimal of
-  // price, which tightens the ring the price sits in.
-  const priceScale = multiplyBy10 ? 10 : 1;
-  const targetNumber = levelsData ? Math.round(levelsData.price * priceScale) : 81 * priceScale;
+  // Price -> grid square: the cell whose value is nearest the price.
+  const gridValue = Number(gridValueInput);
+  const gridIncrement = Number(gridIncrementInput);
+  const gridError =
+    !Number.isFinite(gridValue) || gridValueInput.trim() === '' ? 'Value must be a number.'
+    : !(gridIncrement > 0) ? 'Increment must be greater than 0.'
+    : null;
+  const priceCell = gridError
+    ? null
+    : nearestCell(levelsData ? levelsData.price : 81, { value: gridValue, increment: gridIncrement });
+  const shownError = gridError ?? (priceCell === null ? 'Price is below Value.' : null);
+  const targetNumber = priceCell;
+  const findValue = findInput.trim() === '' ? null : Number(findInput);
 
   const sunDegree = livePositions
     ? livePositions.sunDegree
@@ -267,12 +281,35 @@ const GannChartTest = () => {
                   <label className="form-check-label" htmlFor="showMoon">Show Moon</label>
                 </div>
                 <div className="form-check">
-                  <input className="form-check-input" type="checkbox" id="multiplyBy10"
-                         checked={multiplyBy10}
-                         onChange={(e) => setMultiplyBy10(e.target.checked)} />
-                  <label className="form-check-label" htmlFor="multiplyBy10">
-                    Multiply price &times;10
+                  <input className="form-check-input" type="checkbox" id="clockwise"
+                         checked={clockwise} onChange={(e) => setClockwise(e.target.checked)} />
+                  <label className="form-check-label" htmlFor="clockwise">Clockwise</label>
+                </div>
+                <div className="d-flex mt-1" style={{ gap: '0.5rem' }}>
+                  <label className="form-label mb-0" htmlFor="gridValue" style={{ width: '4.5rem' }}>
+                    Value
                   </label>
+                  <input type="number" step="any" id="gridValue" className="form-control form-control-sm"
+                         value={gridValueInput}
+                         onChange={(e) => setGridValueInput(e.target.value)} />
+                </div>
+                <div className="d-flex mt-1" style={{ gap: '0.5rem' }}>
+                  <label className="form-label mb-0" htmlFor="gridIncrement" style={{ width: '4.5rem' }}>
+                    Increment
+                  </label>
+                  <input type="number" step="any" min="0" id="gridIncrement"
+                         className="form-control form-control-sm"
+                         value={gridIncrementInput}
+                         onChange={(e) => setGridIncrementInput(e.target.value)} />
+                </div>
+                {shownError && <div className="text-danger small mt-1">{shownError}</div>}
+                <div className="d-flex mt-1" style={{ gap: '0.5rem' }}>
+                  <label className="form-label mb-0" htmlFor="findInput" style={{ width: '4.5rem' }}>
+                    Find
+                  </label>
+                  <input type="number" step="any" id="findInput" className="form-control form-control-sm"
+                         placeholder="price" value={findInput}
+                         onChange={(e) => setFindInput(e.target.value)} />
                 </div>
                 <div className="form-check">
                   <input className="form-check-input" type="checkbox" id="highlightSpokes"
@@ -304,7 +341,7 @@ const GannChartTest = () => {
                         {levelsData.price_date ? `as of ${levelsData.price_date}` : '(live)'}
                       </span>
                       <span className="ms-2 text-muted">
-                        → square {targetNumber}{multiplyBy10 ? ' (×10)' : ''}
+                        {!shownError && <>→ square {targetNumber} (Value {gridValue}, Increment {gridIncrement})</>}
                       </span>
                     </div>
                     <div>
@@ -358,6 +395,7 @@ const GannChartTest = () => {
           </div>
         </div>
 
+        {!shownError && (
         <GannSquareChart
           targetNumber={targetNumber}
           sunPosition={sunDegree}
@@ -367,11 +405,15 @@ const GannChartTest = () => {
           cellSize={cellSize}
           highlightSpokes={highlightSpokes}
           zeroDegreeOffset={zeroDegreeOffset}
-          priceScale={priceScale}
+          gridValue={gridValue}
+          gridIncrement={gridIncrement}
+          clockwise={clockwise}
+          findValue={findValue}
           markCount={markCount}
           onLevelsChange={setChartLevels}
           onLaddersChange={setLadders}
         />
+        )}
 
         {ladders && (
           <div className="card mt-4">

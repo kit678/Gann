@@ -123,6 +123,8 @@ const HALFWAY_SUB_INDEX = 4;
  * @param {'center'|'sun'|'moon'} options.source
  * @param {number} [options.scale] - price multiplier used to reach the grid
  * @param {number} [options.count] - major marks per direction
+ * @param {(square:number)=>number} [options.toPrice] - square -> price;
+ *   defaults to square / scale
  * @param {{row:number, col:number}} [options.targetPosition] - defaults to
  *   the grid's own target
  * @returns {object[]} levels, sorted by square descending
@@ -132,6 +134,7 @@ export function buildLadder({
   crossCentre,
   source,
   scale = 1,
+  toPrice = (square) => square / scale,
   count = 8,
   targetPosition = grid.targetPosition,
 }) {
@@ -154,7 +157,7 @@ export function buildLadder({
   const ascending = [...down].reverse().concat(targetIsMajor ? [targetCell] : [], up);
 
   const levels = ascending.map((cell) => ({
-    price: cell.value / scale,
+    price: toPrice(cell.value),
     square: cell.value,
     source,
     kind: 'major',
@@ -179,7 +182,7 @@ export function buildLadder({
     for (let s = 0; s < SUBS_PER_SEGMENT; s++) {
       const square = points[s];
       levels.push({
-        price: square / scale,
+        price: toPrice(square),
         square,
         source,
         kind: 'sub',
