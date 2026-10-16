@@ -69,7 +69,10 @@ Positions use x to the right, y down, and 1 at the centre unless stated.
   - The ring starts at (−(k−1), −1) and runs clockwise through N, E and S, ending at west (−k, 0).
   - The west row holds the centred square numbers 1, 5, 13, 25, 41.
 - **Pentagon** [20]: ring k has 5k cells and ends at the west vertex. The west row holds 1, 6, 16, 31 (centred pentagonal numbers).
-  - Expected but not inspected: Hexagon, Heptagon and Octagon follow the same rule with 6k, 7k and 8k cells.
+  - Hexagon, Heptagon and Octagon follow the same rule with 6k, 7k and 8k cells. Checked on screen in a second run (2026-10-15).
+    - Hexagon ring 1 is 2 upper-left, 3 upper-right, 4 east, 5 lower-right, 6 lower-left, 7 west. Ring 2 runs 8–19 and ends west.
+    - This matches Gann's own Hexagon Chart text: 7, 19, 37 … 397 lie on one line, and 2, 9, 22, 41 … 342 lie on the line 60° from it.
+    - Heptagon ring 1 ends at 8 (west). Octagon ring 1 runs 2 (north-west) … 9 (west), and ring 2 ends at 25 (west).
 
 ## Figures (black-box run 2, 2026-10-15)
 
