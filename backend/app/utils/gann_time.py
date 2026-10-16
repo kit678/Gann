@@ -21,11 +21,11 @@ import swisseph as swe
 
 from .ephemeris import BODIES, GANNZILLA_STD_OFFSETS, SUPPORTED_YEARS, initialize_ephemeris
 
-# Search step in days. Small enough that no body (the Sun included) moves
-# more than a few degrees between samples, so a crossing is never skipped.
+# Search step in days. No body moves more than a few degrees between
+# samples. A retrograde planet whose station sits within ~0.03 deg of the
+# target can cross it twice inside one step; the pair is then skipped and a
+# later crossing returned. That is a vanishingly rare target choice.
 _STEP_DAYS = 0.25
-# Give up after this many days. A 4-part Saturn cycle needs about 7.5 years.
-_MAX_SEARCH_DAYS = 365.25 * 40
 
 _UNIX_EPOCH_JD = 2440587.5
 
@@ -40,9 +40,18 @@ def _jd(when: datetime.datetime) -> float:
     return _UNIX_EPOCH_JD + when.timestamp() / 86400.0
 
 
+_EPOCH = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+
+
 def _from_jd(jd: float) -> datetime.datetime:
-    """Timezone-aware UTC datetime for a Julian day (UT)."""
-    return datetime.datetime.fromtimestamp((jd - _UNIX_EPOCH_JD) * 86400.0, datetime.timezone.utc)
+    """Timezone-aware UTC datetime for a Julian day (UT). Works before 1970 on Windows too."""
+    return _EPOCH + datetime.timedelta(days=jd - _UNIX_EPOCH_JD)
+
+
+def _range_jd() -> tuple:
+    """First and last Julian day covered by the bundled ephemeris files."""
+    return (swe.julday(SUPPORTED_YEARS[0], 1, 1, 0.0),
+            swe.julday(SUPPORTED_YEARS[1], 12, 31, 24.0))
 
 
 def _lon(jd: float, body: int) -> float:
@@ -60,16 +69,26 @@ def next_longitude_crossing(body: int, start_jd: float, target: float, backward:
     body's longitude passes `target`, to about a second.
 
     Raises:
-        ValueError: if no crossing is found within _MAX_SEARCH_DAYS.
+        ValueError: if the search leaves the supported date range first.
     """
     step = -_STEP_DAYS if backward else _STEP_DAYS
+    first_jd, last_jd = _range_jd()
     # Nudge off the start so a body sitting exactly on the target is not
     # reported as crossing at the start itself.
     j = start_jd + step * 1e-3
     prev = _signed_gap(_lon(j, body), target)
-    for _ in range(int(_MAX_SEARCH_DAYS / _STEP_DAYS)):
+    while True:
         nxt_j = j + step
-        cur = _signed_gap(_lon(nxt_j, body), target)
+        if not first_jd <= nxt_j <= last_jd:
+            raise ValueError(
+                f"No crossing of {target:.2f} deg before the supported range "
+                f"{SUPPORTED_YEARS[0]}-{SUPPORTED_YEARS[1]} ends."
+            )
+        try:
+            cur = _signed_gap(_lon(nxt_j, body), target)
+        except swe.Error:
+            # Some bodies' data files end sooner (Eris's ends around 2102).
+            raise ValueError(f"No crossing of {target:.2f} deg within this body's ephemeris data.")
         # A sign change of the wrapped gap is a crossing, unless it is the
         # +/-180 wrap on the far side of the circle.
         if (prev < 0) != (cur < 0) and abs(prev - cur) < 180.0:
@@ -82,7 +101,6 @@ def next_longitude_crossing(body: int, start_jd: float, target: float, backward:
                     hi = mid
             return (lo + hi) / 2
         j, prev = nxt_j, cur
-    raise ValueError(f"No crossing of {target:.2f} deg found within {_MAX_SEARCH_DAYS:.0f} days.")
 
 
 def gannzilla_date(when: datetime.datetime, city: str) -> datetime.date:
@@ -112,6 +130,8 @@ def cycle_dates(
 
     Returns:
         list of {vertex, angle, utc, date}, vertex 0 being the base itself.
+        A vertex that falls outside the supported date range has utc and
+        date set to None (slow rulers such as Pluto can need centuries).
     """
     if ruler not in BODIES:
         raise ValueError(f"Unknown ruler '{ruler}'.")
@@ -128,10 +148,17 @@ def cycle_dates(
     vertices = [{"vertex": 0, "angle": 0.0, "utc": base.astimezone(datetime.timezone.utc),
                  "date": gannzilla_local_time(base, city).date()}]
     for k in range(1, parts):
-        target = (start_lon + sign * 360.0 * k / parts) % 360.0
-        jd = next_longitude_crossing(body, jd, target, backward=reverse)
+        angle = 360.0 * k / parts
+        target = (start_lon + sign * angle) % 360.0
+        try:
+            jd = next_longitude_crossing(body, jd, target, backward=reverse)
+        except ValueError:
+            # Out of range: this vertex and every later one are unreachable.
+            vertices.extend({"vertex": i, "angle": 360.0 * i / parts, "utc": None, "date": None}
+                            for i in range(k, parts))
+            break
         when = _from_jd(jd)
-        vertices.append({"vertex": k, "angle": 360.0 * k / parts, "utc": when,
+        vertices.append({"vertex": k, "angle": angle, "utc": when,
                          "date": gannzilla_date(when, city)})
     return vertices
 

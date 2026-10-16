@@ -62,6 +62,17 @@ class TestCycles(unittest.TestCase):
         v = cycle_dates("Sun", ny(2026, 10, 15, 20, 30), 4, True, "New York")
         self.assertEqual(v[0]["date"], date(2026, 10, 15))
 
+    def test_slow_ruler_reverse_before_1970_works(self):
+        v = cycle_dates("Pluto", ny(2026, 10, 15), 5, True, "New York")
+        self.assertTrue(all(x["date"] is not None for x in v))
+        self.assertLess(v[-1]["date"], date(1970, 1, 1))
+
+    def test_vertices_beyond_the_supported_range_are_none(self):
+        v = cycle_dates("Eris", ny(2026, 10, 15), 4, False, "New York")
+        self.assertEqual(len(v), 4)
+        self.assertIsNone(v[-1]["date"])
+        self.assertIsNone(v[-1]["utc"])
+
     def test_bad_inputs(self):
         with self.assertRaises(ValueError):
             cycle_dates("Vulcan", ny(2026, 10, 15), 4, False, "New York")

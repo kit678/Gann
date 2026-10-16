@@ -234,7 +234,7 @@ _CYCLE_PARTS = {"tetragram": 4, "pentagram": 5, "hexagram": 6}
 
 
 @router.get("/time-tools")
-async def get_time_tools(
+def get_time_tools(
     datetime_local: Optional[str] = Query(
         None,
         alias="datetime",
@@ -246,7 +246,12 @@ async def get_time_tools(
     hexagram: str = Query("Sun", description="Ruler body, or 'None' to skip"),
     reverse: bool = Query(True, description="Count cycle dates backward from the base"),
 ):
-    """Gannzilla's cycles, moon octant phases and next eclipses for a base instant."""
+    """
+    Gannzilla's cycles, moon octant phases and next eclipses for a base instant.
+
+    A plain `def` on purpose: FastAPI runs it in a worker thread, so a slow
+    ruler (Pluto can take ~0.7 s) does not block the event loop.
+    """
     try:
         if datetime_local is None:
             base = datetime.now(UTC)
@@ -266,8 +271,8 @@ async def get_time_tools(
                     {
                         "vertex": v["vertex"],
                         "angle": v["angle"],
-                        "utc": v["utc"].strftime("%Y-%m-%dT%H:%M:%SZ"),
-                        "date": v["date"].isoformat(),
+                        "utc": v["utc"].strftime("%Y-%m-%dT%H:%M:%SZ") if v["utc"] else None,
+                        "date": v["date"].isoformat() if v["date"] else None,
                     }
                     for v in cycle_dates(ruler, base, _CYCLE_PARTS[name], reverse, city)
                 ]

@@ -12,8 +12,9 @@ const FIGURES = [
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** 'YYYY-MM-DD' -> '12 Jan 2027' */
+/** 'YYYY-MM-DD' -> '12 Jan 2027'; null (beyond the ephemeris data) -> '—' */
 const formatDate = (iso) => {
+  if (!iso) return '—';
   const [y, m, d] = iso.split('-').map(Number);
   return `${d} ${MONTHS[m - 1]} ${y}`;
 };
@@ -26,7 +27,7 @@ const formatLocal = (iso) => `${formatDate(iso.slice(0, 10))} ${iso.slice(11, 16
  * clockwise. Star polygons join every 2nd vertex (pentagram {5/2}); the
  * hexagram is two triangles; the tetragram is a plain square.
  */
-function CycleFigure({ vertices, parts }) {
+function CycleFigure({ vertices, parts, label }) {
   const size = 180;
   const c = size / 2;
   const r = 52;
@@ -42,7 +43,7 @@ function CycleFigure({ vertices, parts }) {
   else polygons = [path(points.map((_, i) => i))];
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img">
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${label} cycle`}>
       <circle cx={c} cy={c} r={r + 8} fill="none" stroke="#e0e0e0" />
       {polygons.map((pts) => (
         <polygon key={pts} points={pts} fill="none" stroke="#2f6fbf" strokeWidth="1.4" />
@@ -121,7 +122,7 @@ const TimeToolsPanel = ({ datetime = null, city = 'New York' }) => {
                     {RULERS.map((name) => <option key={name}>{name}</option>)}
                   </select>
                 </div>
-                {vertices && <CycleFigure vertices={vertices} parts={parts} />}
+                {vertices && <CycleFigure vertices={vertices} parts={parts} label={label} />}
                 {vertices && (
                   <ol className="small mb-0 ps-3" start={0}>
                     {vertices.map((v) => <li key={v.vertex}>{formatDate(v.date)}</li>)}
