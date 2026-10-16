@@ -23,6 +23,8 @@ from ..utils.ephemeris import (
     get_current_sun_angle,
     calculate_sun_position,
     calculate_moon_position,
+    calculate_all_positions,
+    gannzilla_local_to_utc,
 )
 from ..utils.levels_calculator import (
     calculate_levels_for_ticker,
@@ -172,6 +174,58 @@ async def get_celestial_positions(
         }
     except Exception as e:
         logger.error(f"Error computing celestial positions: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/planets")
+async def get_planet_positions(
+    datetime_local: Optional[str] = Query(
+        None,
+        alias="datetime",
+        description="Optional 'YYYY-MM-DDTHH:mm'. Defaults to now.",
+    ),
+    system: str = Query("geocentric", description="'geocentric' or 'heliocentric'"),
+    time_mode: str = Query(
+        "et",
+        description="'et' = US Eastern with DST (like /celestial); "
+                    "'gannzilla' = the city's fixed standard offset, no DST.",
+    ),
+    city: str = Query("New York", description="Gannzilla city, used when time_mode='gannzilla'"),
+):
+    """Positions of all twelve Gannzilla bodies for an instant."""
+    if system not in ("geocentric", "heliocentric"):
+        raise HTTPException(status_code=400, detail="system must be 'geocentric' or 'heliocentric'.")
+    if time_mode not in ("et", "gannzilla"):
+        raise HTTPException(status_code=400, detail="time_mode must be 'et' or 'gannzilla'.")
+
+    try:
+        if time_mode == "gannzilla":
+            if datetime_local is None:
+                when = datetime.now(UTC)
+            else:
+                try:
+                    naive = datetime.fromisoformat(datetime_local)
+                except ValueError:
+                    raise ValueError(
+                        f"Invalid datetime '{datetime_local}'. Expected format YYYY-MM-DDTHH:mm."
+                    )
+                when = gannzilla_local_to_utc(naive, city)
+        else:
+            when = parse_et_datetime(datetime_local) if datetime_local is not None else datetime.now(EASTERN)
+    except (ValueError, OverflowError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        return {
+            "datetime_utc": when.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "system": system,
+            "time_mode": time_mode,
+            "bodies": calculate_all_positions(when, heliocentric=(system == "heliocentric")),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error computing planet positions: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

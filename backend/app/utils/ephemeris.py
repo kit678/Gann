@@ -5,20 +5,55 @@ This module provides functions to calculate the position of the sun
 and other celestial bodies using the Swiss Ephemeris library.
 """
 
+import os
+import threading
 import swisseph as swe
 import datetime
 from typing import Dict, Any, Tuple
 
 
+# Swiss Ephemeris data files (planets, Moon, main asteroids, Eris). Without
+# them swisseph silently falls back to its Moshier model and cannot compute
+# Ceres or Eris at all. SE_EPHE_PATH overrides the bundled folder.
+EPHE_PATH = os.environ.get(
+    "SE_EPHE_PATH",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "ephe")),
+)
+SUPPORTED_YEARS = (1800, 2399)  # range covered by the bundled *_18.se1 files
+
+# Gannzilla's twelve bodies, in its planet-table order.
+BODIES = {
+    "Sun": swe.SUN,
+    "Moon": swe.MOON,
+    "Mercury": swe.MERCURY,
+    "Venus": swe.VENUS,
+    "Mars": swe.MARS,
+    "Ceres": swe.CERES,
+    "Jupiter": swe.JUPITER,
+    "Saturn": swe.SATURN,
+    "Uranus": swe.URANUS,
+    "Neptune": swe.NEPTUNE,
+    "Pluto": swe.PLUTO,
+    "Eris": swe.AST_OFFSET + 136199,
+}
+
+# Seen from the Sun, the Sun has no position and the Moon rides with the Earth.
+_NOT_HELIOCENTRIC = ("Sun", "Moon")
+
+
+# swisseph keeps its data path per thread, and FastAPI runs sync code in worker threads, so initialise once per thread, not once per process.
+_thread_state = threading.local()
+
+
 def initialize_ephemeris() -> None:
     """Initialize the Swiss Ephemeris library."""
-    # Set the path to the ephemeris files (optional)
-    # If not set, the library will try to use the environment variable SE_EPHE_PATH
-    # or look in the current directory
-    # swe.set_ephe_path('/path/to/ephemeris/files')
-    
+    if getattr(_thread_state, "initialized", False):
+        return
+    swe.set_ephe_path(EPHE_PATH)
+
     # Use the tropical zodiac (default)
     swe.set_sid_mode(swe.SIDM_FAGAN_BRADLEY)
+    _thread_state.initialized = True
 
 
 def _to_utc(when: datetime.datetime = None) -> datetime.datetime:
@@ -43,13 +78,16 @@ def _to_utc(when: datetime.datetime = None) -> datetime.datetime:
     return when.astimezone(datetime.timezone.utc)
 
 
-def calculate_body_position(body: int, when: datetime.datetime = None) -> Dict[str, Any]:
+def calculate_body_position(
+    body: int, when: datetime.datetime = None, heliocentric: bool = False
+) -> Dict[str, Any]:
     """
     Calculate a celestial body's position in the tropical zodiac.
 
     Args:
         body: A swisseph body constant, e.g. swe.SUN or swe.MOON
         when: Timezone-aware datetime, naive (treated as UTC), or None for now
+        heliocentric: positions as seen from the Sun instead of the Earth
 
     Returns:
         dict: position data - angle, longitude, zodiac_sign, degrees_in_sign,
@@ -58,6 +96,11 @@ def calculate_body_position(body: int, when: datetime.datetime = None) -> Dict[s
     initialize_ephemeris()
 
     when = _to_utc(when)
+    if not SUPPORTED_YEARS[0] <= when.year <= SUPPORTED_YEARS[1]:
+        raise ValueError(
+            f"Date {when:%Y-%m-%d} is outside the supported range "
+            f"{SUPPORTED_YEARS[0]}-{SUPPORTED_YEARS[1]}."
+        )
 
     jd = swe.julday(
         when.year,
@@ -67,6 +110,8 @@ def calculate_body_position(body: int, when: datetime.datetime = None) -> Dict[s
     )
 
     flags = swe.FLG_SWIEPH | swe.FLG_SPEED
+    if heliocentric:
+        flags |= swe.FLG_HELCTR
     result, _ = swe.calc_ut(jd, body, flags)
 
     longitude = result[0] % 360
@@ -86,6 +131,27 @@ def calculate_body_position(body: int, when: datetime.datetime = None) -> Dict[s
         "zodiac_sign": zodiac_names[zodiac_index],
         "degrees_in_sign": degrees_in_sign,
         "angle": longitude,
+    }
+
+
+def calculate_all_positions(
+    when: datetime.datetime = None, heliocentric: bool = False
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Positions of every Gannzilla body at one instant.
+
+    Args:
+        when: Timezone-aware datetime, naive (treated as UTC), or None for now
+        heliocentric: as seen from the Sun; Sun and Moon are then omitted
+
+    Returns:
+        dict: body name -> the dict calculate_body_position returns
+    """
+    when = _to_utc(when)
+    return {
+        name: calculate_body_position(body, when, heliocentric)
+        for name, body in BODIES.items()
+        if not (heliocentric and name in _NOT_HELIOCENTRIC)
     }
 
 
@@ -148,4 +214,38 @@ def get_current_sun_angle() -> float:
     Returns:
         float: The sun's longitude in degrees (0-360)
     """
-    return calculate_sun_position()["angle"] 
+    return calculate_sun_position()["angle"]
+
+
+# Gannzilla's city list with each city's *standard* UTC offset in hours.
+# Gannzilla applies this offset all year and ignores daylight saving
+# (black-box finding: New York is UTC-5 even in October). Only New York and
+# London are verified against the app; the rest are standard time zones.
+GANNZILLA_STD_OFFSETS = {
+    "Chicago": -6, "Frankfurt": 1, "Hong Kong": 8, "Kiev": 2, "London": 0,
+    "Moscow": 3, "Mumbai": 5.5, "New York": -5, "Paris": 1, "Sao Paulo": -3,
+    "Seoul": 9, "Shanghai": 8, "Sydney": 10, "Tokyo": 9, "Toronto": -5,
+    "Wellington": 12, "Zurich": 1,
+}
+
+
+def gannzilla_local_to_utc(local: datetime.datetime, city: str) -> datetime.datetime:
+    """
+    Convert a Gannzilla wall-clock time to UTC the way Gannzilla does.
+
+    Args:
+        local: naive wall-clock datetime, as typed into Gannzilla
+        city: a key of GANNZILLA_STD_OFFSETS
+
+    Returns:
+        A timezone-aware UTC datetime.
+
+    Raises:
+        ValueError: unknown city, or `local` already carries a timezone.
+    """
+    if city not in GANNZILLA_STD_OFFSETS:
+        raise ValueError(f"Unknown Gannzilla city '{city}'.")
+    if local.tzinfo is not None:
+        raise ValueError("Pass a naive wall-clock time; the city sets the offset.")
+    offset = datetime.timedelta(hours=GANNZILLA_STD_OFFSETS[city])
+    return (local - offset).replace(tzinfo=datetime.timezone.utc)
