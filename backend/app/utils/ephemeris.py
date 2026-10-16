@@ -5,18 +5,25 @@ This module provides functions to calculate the position of the sun
 and other celestial bodies using the Swiss Ephemeris library.
 """
 
+import os
 import swisseph as swe
 import datetime
 from typing import Dict, Any, Tuple
 
 
+# Swiss Ephemeris data files (planets, Moon, main asteroids, Eris). Without
+# them swisseph silently falls back to its Moshier model and cannot compute
+# Ceres or Eris at all. SE_EPHE_PATH overrides the bundled folder.
+EPHE_PATH = os.environ.get(
+    "SE_EPHE_PATH",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "ephe")),
+)
+
+
 def initialize_ephemeris() -> None:
     """Initialize the Swiss Ephemeris library."""
-    # Set the path to the ephemeris files (optional)
-    # If not set, the library will try to use the environment variable SE_EPHE_PATH
-    # or look in the current directory
-    # swe.set_ephe_path('/path/to/ephemeris/files')
-    
+    swe.set_ephe_path(EPHE_PATH)
+
     # Use the tropical zodiac (default)
     swe.set_sid_mode(swe.SIDM_FAGAN_BRADLEY)
 
