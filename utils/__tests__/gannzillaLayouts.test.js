@@ -95,6 +95,50 @@ describe('Pentagon to Octagon (black-box [20])', () => {
   });
 });
 
+describe("Hexagon (black-box, and Gann's own Hexagon Chart text)", () => {
+  const h = (n) => layoutPosition('hexagon', n);
+  const angleOf = (p) => (Math.atan2(-p.y, p.x) * 180) / Math.PI; // maths angle, y up
+
+  test('ring 1 as Gannzilla draws it: 2 upper-left, 4 east, 7 west', () => {
+    expect(angleOf(h(2))).toBeCloseTo(120, 9);
+    expect(angleOf(h(3))).toBeCloseTo(60, 9);
+    expect(angleOf(h(4))).toBeCloseTo(0, 9);
+    expect(angleOf(h(5))).toBeCloseTo(-60, 9);
+    expect(angleOf(h(6))).toBeCloseTo(-120, 9);
+    expect(Math.abs(angleOf(h(7)))).toBeCloseTo(180, 9);
+  });
+
+  test('Gann: 7, 19, 37 ... 397 all lie on one straight line from the centre (west)', () => {
+    [7, 19, 37, 61, 91, 127, 169, 217, 271, 331, 397].forEach((n) => {
+      expect(Math.abs(angleOf(h(n)))).toBeCloseTo(180, 9);
+    });
+  });
+
+  test('Gann: 2, 9, 22 ... 342 lie on the line 60 deg from it', () => {
+    [2, 9, 22, 41, 66, 97, 134, 177, 226, 281, 342].forEach((n) => {
+      expect(angleOf(h(n))).toBeCloseTo(120, 9);
+    });
+  });
+});
+
+describe('Heptagon and Octagon ring 1 (black-box)', () => {
+  test('ring 1 ends at west: 8 for the heptagon, 9 for the octagon', () => {
+    expect(layoutPosition('septagon', 8).x).toBeCloseTo(-1, 9);
+    expect(layoutPosition('septagon', 8).y).toBeCloseTo(0, 9);
+    expect(layoutPosition('octagon', 9).x).toBeCloseTo(-1, 9);
+    expect(layoutPosition('octagon', 9).y).toBeCloseTo(0, 9);
+  });
+
+  test('octagon: 2 at the upper-left corner, 3 north, 5 east, 7 south', () => {
+    const o = (n) => layoutPosition('octagon', n);
+    expect(o(2).x).toBeCloseTo(-Math.SQRT1_2, 9);
+    expect(o(2).y).toBeCloseTo(-Math.SQRT1_2, 9);
+    expect(o(3).x).toBeCloseTo(0, 9);
+    expect(o(5).y).toBeCloseTo(0, 9);
+    expect(o(7).y).toBeCloseTo(1, 9);
+  });
+});
+
 describe('anticlockwise and bad input', () => {
   test('anticlockwise mirrors every layout left-right', () => {
     LAYOUTS.forEach((view) => {
