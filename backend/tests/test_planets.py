@@ -14,7 +14,10 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import swisseph as swe
-from app.utils.ephemeris import calculate_body_position, calculate_all_positions, BODIES
+from app.utils.ephemeris import (
+    calculate_body_position, calculate_all_positions, BODIES,
+    GANNZILLA_STD_OFFSETS, gannzilla_local_to_utc,
+)
 
 
 class TestEphemerisFiles(unittest.TestCase):
@@ -76,6 +79,52 @@ class TestAllBodies(unittest.TestCase):
         geo = calculate_all_positions(when)["Mars"]["longitude"]
         helio = calculate_all_positions(when, heliocentric=True)["Mars"]["longitude"]
         self.assertGreater(abs(geo - helio), 1.0)
+
+
+class TestGannzillaTime(unittest.TestCase):
+    """Gannzilla uses the city's standard offset all year, with no DST."""
+
+    def test_new_york_is_utc_minus_5_in_winter(self):
+        utc = gannzilla_local_to_utc(datetime(2000, 1, 1, 0, 0), "New York")
+        self.assertEqual(utc, datetime(2000, 1, 1, 5, 0, tzinfo=timezone.utc))
+
+    def test_new_york_is_still_utc_minus_5_in_october(self):
+        """Real New York time is EDT (UTC-4) here; Gannzilla still uses -5."""
+        utc = gannzilla_local_to_utc(datetime(2026, 10, 15, 0, 0), "New York")
+        self.assertEqual(utc, datetime(2026, 10, 15, 5, 0, tzinfo=timezone.utc))
+
+    def test_london_is_utc(self):
+        utc = gannzilla_local_to_utc(datetime(2000, 1, 1, 0, 0), "London")
+        self.assertEqual(utc, datetime(2000, 1, 1, 0, 0, tzinfo=timezone.utc))
+
+    def test_mumbai_half_hour_offset(self):
+        utc = gannzilla_local_to_utc(datetime(2000, 1, 1, 0, 0), "Mumbai")
+        self.assertEqual(utc, datetime(1999, 12, 31, 18, 30, tzinfo=timezone.utc))
+
+    def test_london_moon_is_about_2_5_degrees_behind_new_york(self):
+        """Black-box [07]: Moon 217.3 (London 00:00) vs 219.8 (New York 00:00)."""
+        london = calculate_all_positions(gannzilla_local_to_utc(datetime(2000, 1, 1), "London"))
+        new_york = calculate_all_positions(gannzilla_local_to_utc(datetime(2000, 1, 1), "New York"))
+        self.assertAlmostEqual(london["Moon"]["longitude"], 217.3, delta=0.1)
+        self.assertAlmostEqual(new_york["Moon"]["longitude"], 219.8, delta=0.1)
+
+    def test_unknown_city_is_rejected(self):
+        with self.assertRaises(ValueError):
+            gannzilla_local_to_utc(datetime(2000, 1, 1), "Atlantis")
+
+    def test_aware_input_is_rejected(self):
+        with self.assertRaises(ValueError):
+            gannzilla_local_to_utc(datetime(2000, 1, 1, tzinfo=timezone.utc), "London")
+
+    def test_city_list_matches_gannzilla(self):
+        self.assertEqual(
+            sorted(GANNZILLA_STD_OFFSETS),
+            sorted([
+                "Chicago", "Frankfurt", "Hong Kong", "Kiev", "London", "Moscow",
+                "Mumbai", "New York", "Paris", "Sao Paulo", "Seoul", "Shanghai",
+                "Sydney", "Tokyo", "Toronto", "Wellington", "Zurich",
+            ]),
+        )
 
 
 if __name__ == "__main__":

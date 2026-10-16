@@ -200,4 +200,38 @@ def get_current_sun_angle() -> float:
     Returns:
         float: The sun's longitude in degrees (0-360)
     """
-    return calculate_sun_position()["angle"] 
+    return calculate_sun_position()["angle"]
+
+
+# Gannzilla's city list with each city's *standard* UTC offset in hours.
+# Gannzilla applies this offset all year and ignores daylight saving
+# (black-box finding: New York is UTC-5 even in October). Only New York and
+# London are verified against the app; the rest are standard time zones.
+GANNZILLA_STD_OFFSETS = {
+    "Chicago": -6, "Frankfurt": 1, "Hong Kong": 8, "Kiev": 2, "London": 0,
+    "Moscow": 3, "Mumbai": 5.5, "New York": -5, "Paris": 1, "Sao Paulo": -3,
+    "Seoul": 9, "Shanghai": 8, "Sydney": 10, "Tokyo": 9, "Toronto": -5,
+    "Wellington": 12, "Zurich": 1,
+}
+
+
+def gannzilla_local_to_utc(local: datetime.datetime, city: str) -> datetime.datetime:
+    """
+    Convert a Gannzilla wall-clock time to UTC the way Gannzilla does.
+
+    Args:
+        local: naive wall-clock datetime, as typed into Gannzilla
+        city: a key of GANNZILLA_STD_OFFSETS
+
+    Returns:
+        A timezone-aware UTC datetime.
+
+    Raises:
+        ValueError: unknown city, or `local` already carries a timezone.
+    """
+    if city not in GANNZILLA_STD_OFFSETS:
+        raise ValueError(f"Unknown Gannzilla city '{city}'.")
+    if local.tzinfo is not None:
+        raise ValueError("Pass a naive wall-clock time; the city sets the offset.")
+    offset = datetime.timedelta(hours=GANNZILLA_STD_OFFSETS[city])
+    return (local - offset).replace(tzinfo=datetime.timezone.utc)
