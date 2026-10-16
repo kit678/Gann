@@ -6,6 +6,11 @@ import {
 import { buildLadder } from '../utils/gannLevels';
 import { fitView, zoomAt, visibleCellRange, MIN_ZOOM, MAX_ZOOM } from '../utils/gannView';
 import { cellValue, findCell } from '../utils/gannzillaGrid';
+import {
+  POLYGONS, polygonVertices, polygonCells, vectorRays, locatorLine,
+} from '../utils/gannzillaFigures';
+import { angleOf } from './FiguresPanel';
+import { FIGURE_COLORS } from './FigureOverlay';
 
 const VIEWPORT_WIDTH = 900;
 const VIEWPORT_HEIGHT = 620;
@@ -97,6 +102,7 @@ const GannSquareChart = ({
   findValue = null,
   projections = [],
   markCount = 8,
+  figures = null,
   onLevelsChange,
   onLaddersChange,
 }) => {
@@ -199,6 +205,20 @@ const GannSquareChart = ({
 
   const tooLarge = sunGrid.tooLarge;
   const dimension = sunGrid.dimension;
+
+  // Gannzilla's Figures: the visible polygons, and the cells their highlight shades.
+  const shownPolygons = useMemo(() => (!figures || figures.hide ? [] : POLYGONS
+    .filter(({ sides }) => figures.polygons[sides].visible)
+    .map(({ sides }) => ({ sides, ...figures.polygons[sides], angle: angleOf(figures.polygons[sides].angle) }))),
+  [figures]);
+  const figureCells = useMemo(() => {
+    const cells = new Set();
+    if (!dimension) return cells;
+    shownPolygons.filter((p) => p.highlight).forEach((p) => {
+      polygonCells(dimension, p.sides, p.angle, { clockwise }).forEach((k) => cells.add(k));
+    });
+    return cells;
+  }, [shownPolygons, dimension, clockwise]);
 
   // Report levels upward so the page can render them outside the canvas.
   useEffect(() => {
@@ -387,6 +407,11 @@ const GannSquareChart = ({
           ctx.fillRect(x, y, cellSize, cellSize);
         }
 
+        if (figureCells.has(key)) {
+          ctx.fillStyle = FIGURE_COLORS.highlight;
+          ctx.fillRect(x, y, cellSize, cellSize);
+        }
+
         if (value === 1) {
           ctx.fillStyle = COLORS.center;
           ctx.fillRect(x, y, cellSize, cellSize);
@@ -470,11 +495,69 @@ const GannSquareChart = ({
       }
     }
 
+    // Figures, centred on cell 1 with a radius of half the grid. Their angles
+    // are screen angles, so they are not mirrored with an anticlockwise grid.
+    if (figures && !figures.hide) {
+      const at = { cx: gridPx / 2, cy: gridPx / 2 };
+      const r = gridPx / 2;
+      const labelPx = 12 / view.zoom;
+      ctx.font = `${labelPx}px Arial`;
+      const label = (p, text, color) => {
+        const dx = p.x - at.cx;
+        const dy = p.y - at.cy;
+        const len = Math.hypot(dx, dy) || 1;
+        ctx.fillStyle = color;
+        ctx.fillText(text, p.x + (dx / len) * labelPx, p.y + (dy / len) * labelPx);
+      };
+      ctx.lineWidth = 2 / view.zoom;
+
+      shownPolygons.forEach((p) => {
+        const verts = polygonVertices(p.sides, p.angle, r, at);
+        ctx.strokeStyle = FIGURE_COLORS.polygon;
+        ctx.beginPath();
+        verts.forEach((v, i) => (i === 0 ? ctx.moveTo(v.x, v.y) : ctx.lineTo(v.x, v.y)));
+        ctx.closePath();
+        ctx.stroke();
+        verts.forEach((v) => label(v, v.label, FIGURE_COLORS.polygon));
+      });
+
+      const { vectors, locator } = figures;
+      if (vectors.visible) {
+        ctx.strokeStyle = FIGURE_COLORS.vector;
+        vectorRays(vectors.values, angleOf(vectors.angle), r, { clockwise: vectors.clockwise, ...at })
+          .forEach((ray) => {
+            ctx.beginPath();
+            ctx.moveTo(at.cx, at.cy);
+            ctx.lineTo(ray.x, ray.y);
+            ctx.stroke();
+            label(ray, String(ray.value), FIGURE_COLORS.vector);
+          });
+      }
+
+      if (locator.visible) {
+        const { bear, bull } = locatorLine(angleOf(locator.angle), r, at);
+        ctx.strokeStyle = '#555';
+        ctx.setLineDash([8 / view.zoom, 4 / view.zoom]);
+        ctx.beginPath();
+        ctx.moveTo(bear.x, bear.y);
+        ctx.lineTo(bull.x, bull.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        [[bear, FIGURE_COLORS.bear, 'Bear'], [bull, FIGURE_COLORS.bull, 'Bull']].forEach(([p, color, text]) => {
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 5 / view.zoom, 0, Math.PI * 2);
+          ctx.fill();
+          label(p, text, color);
+        });
+      }
+    }
+
     ctx.restore();
   }, [
     view, cellSize, dimension, tooLarge, highlightSpokes,
     showSun, showMoon, sunGrid, moonGrid, sunLevels, moonLevels,
-    clockwise, toPrice, findIndex, projectedGlyphs,
+    clockwise, toPrice, findIndex, projectedGlyphs, figures, shownPolygons, figureCells,
   ]);
 
   if (tooLarge) {
