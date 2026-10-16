@@ -5,6 +5,7 @@ import {
 } from '../utils/gannGrid';
 import { buildLadder } from '../utils/gannLevels';
 import { fitView, zoomAt, visibleCellRange, MIN_ZOOM, MAX_ZOOM } from '../utils/gannView';
+import { cellValue, findCell } from '../utils/gannzillaGrid';
 
 const VIEWPORT_WIDTH = 900;
 const VIEWPORT_HEIGHT = 620;
@@ -25,6 +26,7 @@ const COLORS = {
   moonCell: 'rgba(200, 210, 224, 0.75)',
   moonCross: 'rgba(160, 80, 220, 0.55)',
   conjunctCell: 'rgba(214, 150, 90, 0.8)',
+  find: 'rgba(20, 20, 20, 0.95)',
   upFill: 'rgba(0, 200, 0, 0.4)',
   downFill: 'rgba(255, 0, 0, 0.4)',
   upRing: 'rgba(0, 160, 0, 0.95)',
@@ -32,6 +34,9 @@ const COLORS = {
 };
 
 const cellKey = (row, col) => `${row},${col}`;
+
+/** A cell's displayed number: whole numbers stay whole, decimals keep at most 4 places. */
+const formatCell = (v) => String(Math.round(v * 10000) / 10000);
 
 /** Draw the Sun's rayed disc, centred in its square. */
 function drawSunGlyph(ctx, cx, cy, cellSize, zoom) {
@@ -85,7 +90,10 @@ const GannSquareChart = ({
   cellSize = 40,
   highlightSpokes = true,
   zeroDegreeOffset = DEFAULT_ZERO_DEGREE_OFFSET,
-  priceScale = 1,
+  gridValue = 1,
+  gridIncrement = 1,
+  clockwise = true,
+  findValue = null,
   markCount = 8,
   onLevelsChange,
   onLaddersChange,
@@ -94,6 +102,14 @@ const GannSquareChart = ({
   const [view, setView] = useState({ zoom: 1, panX: 0, panY: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0 });
+
+  const grid = useMemo(
+    () => ({ value: gridValue, increment: gridIncrement }),
+    [gridValue, gridIncrement]
+  );
+  const toPrice = useCallback((square) => cellValue(square, grid), [grid]);
+  // Gannzilla's Find box: the cell with the largest value <= findValue.
+  const findIndex = findValue == null ? null : findCell(findValue, grid);
 
   const sunDegree = normalizeBodyDegree(sunPosition, 71, zeroDegreeOffset);
   const moonDegree =
@@ -139,7 +155,7 @@ const GannSquareChart = ({
         grid: sunGrid,
         crossCentre: centreCross,
         source: 'center',
-        scale: priceScale,
+        toPrice,
         count: markCount,
       }),
       sun: sunGrid.bodyFound
@@ -147,7 +163,7 @@ const GannSquareChart = ({
             grid: sunGrid,
             crossCentre: sunGrid.bodyPosition,
             source: 'sun',
-            scale: priceScale,
+            toPrice,
             count: markCount,
           })
         : [],
@@ -156,13 +172,13 @@ const GannSquareChart = ({
             grid: moonGrid,
             crossCentre: moonGrid.bodyPosition,
             source: 'moon',
-            scale: priceScale,
+            toPrice,
             count: markCount,
           })
         : [],
     };
     return result;
-  }, [sunGrid, moonGrid, centreCross, priceScale, markCount]);
+  }, [sunGrid, moonGrid, centreCross, toPrice, markCount]);
 
   useEffect(() => {
     if (onLaddersChange) onLaddersChange(ladders);
@@ -175,11 +191,17 @@ const GannSquareChart = ({
   useEffect(() => {
     if (!onLevelsChange) return;
     onLevelsChange({
-      sun: { up: sunLevels.up.map((l) => l.value), down: sunLevels.down.map((l) => l.value) },
-      moon: { up: moonLevels.up.map((l) => l.value), down: moonLevels.down.map((l) => l.value) },
+      sun: {
+        up: sunLevels.up.map((l) => formatCell(toPrice(l.value))),
+        down: sunLevels.down.map((l) => formatCell(toPrice(l.value))),
+      },
+      moon: {
+        up: moonLevels.up.map((l) => formatCell(toPrice(l.value))),
+        down: moonLevels.down.map((l) => formatCell(toPrice(l.value))),
+      },
       isConjunct,
     });
-  }, [sunLevels, moonLevels, isConjunct, onLevelsChange]);
+  }, [sunLevels, moonLevels, isConjunct, onLevelsChange, toPrice]);
 
   // Fit only when the grid dimension changes. Recalculating levels (which the
   // Moon triggers roughly every 1.8 hours) must not throw away the user's view.
@@ -270,6 +292,9 @@ const GannSquareChart = ({
     ctx.translate(view.panX, view.panY);
     ctx.scale(view.zoom, view.zoom);
 
+    // Anticlockwise is Gannzilla's left-right mirror of the same spiral.
+    const colX = (col) => (clockwise ? col : dimension - 1 - col) * cellSize;
+
     const range = visibleCellRange(view, cellSize, dimension, VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
     const scaledCell = cellSize * view.zoom;
     const drawLabels = scaledCell >= LABEL_MIN_CELL_PX;
@@ -302,7 +327,7 @@ const GannSquareChart = ({
     // Body crosses, drawn full-width across the grid
     const drawCross = (position, color) => {
       if (position.row < 0) return;
-      const cx = position.col * cellSize + cellSize / 2;
+      const cx = colX(position.col) + cellSize / 2;
       const cy = position.row * cellSize + cellSize / 2;
       ctx.strokeStyle = color;
       ctx.lineWidth = 2 / view.zoom;
@@ -333,12 +358,14 @@ const GannSquareChart = ({
     ctx.textBaseline = 'middle';
     ctx.font = `${Math.max(10, cellSize * 0.4)}px Arial`;
 
+    const colFrom = clockwise ? range.colStart : 0;
+    const colTo = clockwise ? range.colEnd : dimension - 1;
     for (let row = range.rowStart; row <= range.rowEnd; row++) {
-      for (let col = range.colStart; col <= range.colEnd; col++) {
+      for (let col = colFrom; col <= colTo; col++) {
         const value = sunGrid.matrix[row][col];
         if (value === null) continue;
 
-        const x = col * cellSize;
+        const x = colX(col);
         const y = row * cellSize;
         const key = cellKey(row, col);
 
@@ -407,9 +434,15 @@ const GannSquareChart = ({
           ctx.strokeRect(x, y, cellSize, cellSize);
         }
 
+        if (findIndex !== null && value === findIndex) {
+          ctx.strokeStyle = COLORS.find;
+          ctx.lineWidth = 4 / view.zoom;
+          ctx.strokeRect(x + 1, y + 1, cellSize - 2, cellSize - 2);
+        }
+
         if (drawLabels) {
           ctx.fillStyle = COLORS.text;
-          ctx.fillText(String(value), x + cellSize / 2, y + cellSize / 2);
+          ctx.fillText(formatCell(toPrice(value)), x + cellSize / 2, y + cellSize / 2);
         }
       }
     }
@@ -418,6 +451,7 @@ const GannSquareChart = ({
   }, [
     view, cellSize, dimension, tooLarge, highlightSpokes,
     showSun, showMoon, sunGrid, moonGrid, sunLevels, moonLevels,
+    clockwise, toPrice, findIndex,
   ]);
 
   if (tooLarge) {
@@ -469,9 +503,10 @@ const GannSquareChart = ({
 
       <div className="d-flex flex-wrap mt-2" style={{ gap: '1rem', fontSize: '0.85rem' }}>
         <Swatch color={COLORS.centerCross} label="Center's cardinal/ordinal cross" />
-        <Swatch color={COLORS.center} label="Center (1)" />
+        <Swatch color={COLORS.center} label={`Center (${formatCell(gridValue)})`} />
         <Swatch color={COLORS.oddSquare} label="Odd squares (9, 25, 49...)" />
         <Swatch color={COLORS.target} label="Price square" />
+        {findIndex !== null && <Swatch color="transparent" border={COLORS.find} label="Find" />}
         {showSun && <Swatch color={COLORS.sunCell} label="Sun" />}
         {showMoon && moonGrid && <Swatch color={COLORS.moonCell} label="Moon" />}
         {isConjunct && showSun && showMoon && (
