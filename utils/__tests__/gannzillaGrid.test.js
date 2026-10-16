@@ -1,4 +1,4 @@
-import { spiralOffset, cellValue, findCell } from '../gannzillaGrid';
+import { spiralOffset, cellValue, findCell, nearestCell } from '../gannzillaGrid';
 import { CELL_VALUES } from './fixtures/gannzillaDocs';
 import { buildGannSquare } from '../gannGrid';
 
@@ -128,5 +128,41 @@ describe('findCell', () => {
   test('hits every cell exactly on a decimal grid', () => {
     const g = { value: 20000, increment: 0.05 };
     for (let n = 1; n <= 2000; n++) expect(findCell(cellValue(n, g), g)).toBe(n);
+  });
+});
+
+describe('nearestCell (price square, rounds to nearest)', () => {
+  test('Value = Increment = 0.1 reproduces the old round(price x 10)', () => {
+    const g = { value: 0.1, increment: 0.1 };
+    [81, 123.44, 123.45, 123.46, 0.1, 397.04, 0.15, 2.25, 99.95].forEach((price) => {
+      expect(nearestCell(price, g)).toBe(Math.round(price * 10));
+    });
+  });
+
+  test('matches the old rounding for every 2-decimal price from 0.05 to 5000', () => {
+    const g = { value: 0.1, increment: 0.1 };
+    for (let cents = 5; cents <= 500000; cents++) {
+      const price = cents / 100;
+      if (nearestCell(price, g) !== Math.round(price * 10)) {
+        throw new Error(`mismatch at ${price}`);
+      }
+    }
+  });
+
+  test('Value = Increment = 1 reproduces the old round(price)', () => {
+    [81, 123.4, 123.5, 4917.2].forEach((price) => {
+      expect(nearestCell(price, { value: 1, increment: 1 })).toBe(Math.round(price));
+    });
+  });
+
+  test('inverts cellValue on a custom grid', () => {
+    const g = { value: 100, increment: 2 };
+    for (let n = 1; n <= 500; n++) expect(nearestCell(cellValue(n, g), g)).toBe(n);
+  });
+
+  test('returns null below the centre, for a non-positive increment, or non-finite input', () => {
+    expect(nearestCell(0.04, { value: 0.1, increment: 0.1 })).toBeNull();
+    expect(nearestCell(5, { increment: 0 })).toBeNull();
+    expect(nearestCell(NaN)).toBeNull();
   });
 });

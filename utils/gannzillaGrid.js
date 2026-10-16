@@ -72,3 +72,22 @@ export function findCell(target, { value = 1, increment = 1 } = {}) {
   const n = Math.floor(snapped);
   return n < 1 ? null : n;
 }
+
+/**
+ * The cell index whose value is nearest to `target`. This is how a price
+ * picks its square: Value = Increment = 0.1 gives exactly the old
+ * Math.round(price * 10). (Gannzilla's Find box rounds down instead; see
+ * findCell.) Null when the target is below the centre, the increment is not
+ * positive, or the input is not finite.
+ */
+export function nearestCell(target, { value = 1, increment = 1 } = {}) {
+  if (!(increment > 0)) return null;
+  const raw = (target - value) / increment + 1;
+  if (!Number.isFinite(raw)) return null;
+  // Snap float noise around exact halves (123.45 on a 0.1 grid lands on
+  // 1234.4999999999998) so they round up like Math.round(price * 10) did.
+  const doubled = raw * 2;
+  const snapped = Math.abs(doubled - Math.round(doubled)) < 1e-9 ? Math.round(doubled) / 2 : raw;
+  const n = Math.round(snapped);
+  return n < 1 ? null : n;
+}
