@@ -5,6 +5,8 @@ import LevelLadderTable from '../components/LevelLadderTable';
 import TimeToolsPanel from '../components/TimeToolsPanel';
 import CosmogramPanel from '../components/CosmogramPanel';
 import LayoutViewer from '../components/LayoutViewer';
+import FiguresPanel from '../components/FiguresPanel';
+import { defaultFigures } from '../utils/gannzillaFigures';
 import { getLevelsForTicker, getCelestial } from '../utils/api';
 import { ZERO_DEGREE_PRESETS, DEFAULT_ZERO_DEGREE_OFFSET } from '../utils/gannGrid';
 import { nearestCell } from '../utils/gannzillaGrid';
@@ -54,6 +56,8 @@ const GannChartTest = () => {
   const [ladders, setLadders] = useState(null);
   const [markCount, setMarkCount] = useState(8);
   const [showLadder, setShowLadder] = useState(false);
+  // Gannzilla's Figures, shared by the Square of 9 and the Cosmogram.
+  const [figures, setFigures] = useState(defaultFigures);
 
   // Live-polled positions. Null means "use whatever came back with the price".
   const [livePositions, setLivePositions] = useState(null);
@@ -412,6 +416,8 @@ const GannChartTest = () => {
           </div>
         </div>
 
+        <FiguresPanel figures={figures} onChange={setFigures} />
+
         {!shownError && (
         <GannSquareChart
           targetNumber={targetNumber}
@@ -428,6 +434,7 @@ const GannChartTest = () => {
           findValue={findValue}
           projections={showProjections ? projections : NO_PROJECTIONS}
           markCount={markCount}
+          figures={figures}
           onLevelsChange={setChartLevels}
           onLaddersChange={setLadders}
         />
@@ -476,6 +483,7 @@ const GannChartTest = () => {
           datetime={selectedDateTime || null}
           price={levelsData ? Number(levelsData.price) : null}
           onBodiesChange={setProjections}
+          figures={figures}
         />
 
         <TimeToolsPanel datetime={selectedDateTime || null} />

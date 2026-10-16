@@ -43,6 +43,7 @@
 5. **Time tools.** Sun-longitude solver for cycles (extract #19–21) and the annual Chronometer (extract #24), plus moon octant phases and eclipses (extract #22–23).
 6. **Cosmogram + aspects + projections UI.** Planet wheel, price "$" point, Summary/Average, aspect lines, Inspector table.
 7. **Other layouts and figures.** Layout rules are in the findings note: Square of 4 (2×2-core spiral), Circle of 12/24/36 (polar, cell 1 just above west, clockwise), Permanent square (column-major), Tetragon/Pentagon (ring k has N·k cells, ending at the west vertex). Hexagon–Octagon are assumed to follow the same rule; check before building. Vortex units are still unknown.
+8. **Figures and radix/transit.** DONE 2026-10-15 (`2026-10-15-gannzilla-figures-inspector.md`): polygons, Vectors and Locator on the Square of 9 and the Cosmogram; radix inner wheel, Δ column and the 12×12 Inspector. Still open: the Vortex (Radius units), and black-box checks of the figure assumptions (highlight rule, Vectors Clockwise off, which Locator end is the angle, whether Cosmogram figures follow the wheel's Angle).
 
 ---
 

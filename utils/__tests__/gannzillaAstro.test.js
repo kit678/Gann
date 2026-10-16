@@ -1,5 +1,5 @@
 import {
-  mod360, separation, delta, priceToDegree, longitudeToPrice, summary, average, DEFAULT_ASPECTS, findAspect,
+  mod360, separation, delta, priceToDegree, longitudeToPrice, summary, average, DEFAULT_ASPECTS, findAspect, inspectorTable,
 } from '../gannzillaAstro';
 import {
   DOW_PRICE, DOW_PLANETS, DOW_SUMMARY, DOW_AVERAGE, RADIX_TRANSIT, RADIX_TRANSIT_2026, DOW_MARKET_X10,
@@ -125,5 +125,41 @@ describe('findAspect with the desktop defaults (extract aspects table, #17-18)',
 
   test('float noise at the orb edge still counts', () => {
     expect(findAspect(0.1, 89.1).name).toBe('Square');
+  });
+});
+
+describe('inspectorTable (extract #16-#18, radix/transit corrected by the black box)', () => {
+  const radix = RADIX_TRANSIT.map((r) => r.radix);
+  const transit = RADIX_TRANSIT.map((r) => r.transit);
+  const t = inspectorTable(radix, transit);
+  const idx = (name) => RADIX_TRANSIT.findIndex((r) => r.body === name);
+
+  test('is 12x12', () => {
+    expect(t).toHaveLength(12);
+    t.forEach((row) => expect(row).toHaveLength(12));
+  });
+
+  test('the diagonal is radix vs transit as the shortest arc', () => {
+    RADIX_TRANSIT.forEach((r, i) => expect(t[i][i].value).toBeCloseTo(r.arc, 9));
+  });
+
+  test('above the diagonal is radix vs radix', () => {
+    expect(t[idx('Sun')][idx('Mercury')].value).toBe(9);
+    expect(t[idx('Sun')][idx('Venus')].value).toBe(39);
+    expect(t[idx('Sun')][idx('Mars')].value).toBe(48);
+    expect(t[idx('Sun')][idx('Jupiter')].value).toBe(105);
+    expect(t[idx('Moon')][idx('Saturn')].aspect.name).toBe('Opposition');
+  });
+
+  test('below the diagonal is transit vs transit', () => {
+    expect(t[idx('Mercury')][idx('Sun')].value).toBe(22);
+    expect(t[idx('Venus')][idx('Sun')].value).toBe(14);
+    expect(t[idx('Saturn')][idx('Venus')].aspect.name).toBe('Square');
+    expect(t[idx('Jupiter')][idx('Sun')].aspect.name).toBe('Quincunx');
+  });
+
+  test('plain cells carry no aspect', () => {
+    expect(t[idx('Sun')][idx('Mercury')].aspect).toBeNull();
+    expect(t[idx('Mercury')][idx('Sun')].aspect).toBeNull();
   });
 });
