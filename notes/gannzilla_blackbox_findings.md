@@ -90,3 +90,19 @@ Tested on the "ClaudeTest" chart, Square of 9 Size 5. The user's Default chart w
   - **Size at Radius 1:** the outermost loop reaches about 10 cells.
   - **Price:** the cell the Vortex is centred on. Price 9 moves it to cell 9.
   - **Approximate:** the exact radii where the spirals cross the axes could not be read precisely, so GannSq9 models them as r = 10·Radius·φ^(−t/90°), measured inward from the Angle.
+
+## Data types: Date and Time grids (black-box run 3, 2026-10-15)
+
+Tested on the "ClaudeTest" chart, Square of 9 Size 5.
+
+- **Options:** Price, Date, Time, Price and date, Price and time.
+- **Date:** the settings are Today, Value (start date), Find (a date), Increment with a unit (Day, Week, Month, Year), Show trading days, Format, and a Holidays list (empty by default; Visible plus Add).
+  - Cell n shows start + (n−1) × increment. Cell 1 is 15.10, cell 2 is 16.10, and so on.
+  - The formats are dd.mm (default), dd.mm.yy, dd.mm.yyyy and d mmm.
+  - **Show trading days** skips Saturdays and Sundays: 15.10 (Thu), 16.10 (Fri), then 19.10 (Mon).
+  - The Holidays list is assumed to be extra days skipped in trading-days mode. Its exact use was not tested.
+- **Time:** the settings are Now, Value (start date and time), Find, Increment with a unit (Minute, Hour), Show trading days, Format (for the date line), Session (Visible, Start 09:00, End 18:00), and Holidays.
+  - Each cell shows HH:mm with the date (dd.mm) under it.
+  - **Session on:** times stay inside [start, end], with both ends included. 09:00, 10:00 … 18:00 is 10 cells per day, then the next day starts at 09:00. A start value before the session (00:00) snaps forward to 09:00.
+- **Price and date / Price and time:** both sets of settings are shown, and each cell shows the price value with the date (or time) under it.
+- **Vortex:** its Price field becomes a Date (or Time) in these modes.

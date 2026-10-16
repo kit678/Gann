@@ -100,6 +100,9 @@ const GannSquareChart = ({
   gridIncrement = 1,
   clockwise = true,
   findValue = null,
+  // Date/Time grids: index -> label lines, and the Find cell, from the page.
+  cellLabel = null,
+  findIndexOverride,
   projections = [],
   markCount = 8,
   figures = null,
@@ -117,7 +120,9 @@ const GannSquareChart = ({
   );
   const toPrice = useCallback((square) => cellValue(square, grid), [grid]);
   // Gannzilla's Find box: the cell with the largest value <= findValue.
-  const findIndex = findValue == null ? null : findCell(findValue, grid);
+  const findIndex = findIndexOverride !== undefined
+    ? findIndexOverride
+    : (findValue == null ? null : findCell(findValue, grid));
 
   const sunDegree = normalizeBodyDegree(sunPosition, 71, zeroDegreeOffset);
   const moonDegree =
@@ -468,7 +473,19 @@ const GannSquareChart = ({
 
         if (drawLabels) {
           ctx.fillStyle = COLORS.text;
-          ctx.fillText(formatCell(toPrice(value)), x + cellSize / 2, y + cellSize / 2);
+          const lines = cellLabel ? cellLabel(value) : [formatCell(toPrice(value))];
+          if (lines.length === 1) {
+            ctx.fillText(lines[0], x + cellSize / 2, y + cellSize / 2);
+          } else {
+            // Stacked lines (e.g. price over date), shrunk to fit the cell.
+            ctx.save();
+            const linePx = Math.max(7, (cellSize * 0.8) / lines.length);
+            ctx.font = `${linePx * 0.85}px Arial`;
+            lines.forEach((line, i) => {
+              ctx.fillText(line, x + cellSize / 2, y + cellSize / 2 + (i - (lines.length - 1) / 2) * linePx);
+            });
+            ctx.restore();
+          }
           const glyphs = projectedGlyphs.get(value);
           if (glyphs) {
             ctx.save();
@@ -578,7 +595,7 @@ const GannSquareChart = ({
   }, [
     view, cellSize, dimension, tooLarge, highlightSpokes,
     showSun, showMoon, sunGrid, moonGrid, sunLevels, moonLevels,
-    clockwise, toPrice, findIndex, projectedGlyphs, figures, shownPolygons, grid,
+    clockwise, toPrice, findIndex, projectedGlyphs, figures, shownPolygons, grid, cellLabel,
   ]);
 
   if (tooLarge) {

@@ -14,14 +14,19 @@ const formatCell = (v) => String(Math.round(v * 10000) / 10000);
  * The price's own cell and the Find cell are highlighted, as on the
  * Square of 9.
  */
-const LayoutViewer = ({ gridValue = 1, gridIncrement = 1, clockwise = true, price = null, findValue = null }) => {
+const LayoutViewer = ({
+  gridValue = 1, gridIncrement = 1, clockwise = true, price = null, findValue = null,
+  cellLabel = null, findIndexOverride,
+}) => {
   const [view, setView] = useState('square4');
   const [rings, setRings] = useState(6);
 
   const grid = { value: gridValue, increment: gridIncrement };
   const count = Math.min(layoutCellCount(view, rings), MAX_CELLS);
   const priceCell = price == null ? null : nearestCell(price, grid);
-  const findIndex = findValue == null ? null : findCell(findValue, grid);
+  const findIndex = findIndexOverride !== undefined
+    ? findIndexOverride
+    : (findValue == null ? null : findCell(findValue, grid));
 
   const cells = useMemo(() => {
     const out = [];
@@ -80,10 +85,14 @@ const LayoutViewer = ({ gridValue = 1, gridIncrement = 1, clockwise = true, pric
                           fill={isPrice ? 'rgba(255,165,0,0.45)' : 'none'}
                           stroke={isFind ? '#141414' : 'rgba(255,165,0,1)'} strokeWidth={isFind ? 2.5 : 1.5} />
                 )}
-                <text x={p.x} y={p.y} fontSize={fontSize} textAnchor="middle" dominantBaseline="central"
-                      fill={c.n === 1 ? '#2e7d32' : '#333'} fontWeight={c.n === 1 ? 'bold' : 'normal'}>
-                  {formatCell(cellValue(c.n, grid))}
-                </text>
+                {(cellLabel ? cellLabel(c.n) : [formatCell(cellValue(c.n, grid))]).map((line, i, all) => (
+                  <text key={i} x={p.x} y={Math.round((p.y + (i - (all.length - 1) / 2) * fontSize) * 100) / 100}
+                        fontSize={all.length > 1 ? Math.round(fontSize * 0.85 * 100) / 100 : fontSize}
+                        textAnchor="middle" dominantBaseline="central"
+                        fill={c.n === 1 ? '#2e7d32' : '#333'} fontWeight={c.n === 1 ? 'bold' : 'normal'}>
+                    {line}
+                  </text>
+                ))}
               </g>
             );
           })}
