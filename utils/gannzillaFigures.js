@@ -3,9 +3,9 @@
  * layout from its centre (cell 1).
  *
  * Pure functions. Angles are screen angles through wheelPoint: 0 deg at
- * west, growing clockwise (notes/gannzilla_docs_extract.md §0, §1.3). The
- * rules the guide leaves open (highlight, Vectors Clockwise off, which
- * Locator end is the angle) are stated where they are assumed.
+ * west, growing clockwise (notes/gannzilla_docs_extract.md §0, §1.3).
+ * Every rule here was checked against the desktop app on 2026-10-15
+ * (notes/gannzilla_blackbox_findings.md, "Figures").
  */
 
 import { wheelPoint } from './gannzillaWheel';
@@ -14,6 +14,12 @@ export const POLYGONS = [
   'Triangle', 'Square', 'Pentagon', 'Hexagon', 'Septagon', 'Octagon',
   'Nonagon', 'Decagon', 'Hendecagon', 'Dodecagon',
 ].map((name, i) => ({ name, sides: i + 3 }));
+
+/**
+ * How far figures reach: the circle through the grid's corners, i.e. half
+ * the grid's diagonal (black-box: a Square at 0 touches the corner cells).
+ */
+export const figureRadius = (gridPx) => gridPx / Math.SQRT2;
 
 /** The guide's default Vectors: Fibonacci percentages used directly as degrees. */
 export const DEFAULT_VECTORS = [23.6, 38.2, 50, 61.8, 100, 161.8, 261.8];
@@ -35,17 +41,21 @@ export function polygonVertices(sides, angle, r, { cx = 0, cy = 0 } = {}) {
 }
 
 /**
- * Vectors: one ray per value, measured from the base `angle`.
- * Assumption: Clockwise off is the same left-right mirror the black box
- * showed for the Protractor and Chronometer.
+ * Vectors: one ray per value, measured from the base `angle`. The base is
+ * always a clockwise-from-west screen angle; Clockwise off only turns the
+ * rays the other way from it (black-box: base 30, ray 23.6 sits 6.4 deg
+ * above west). Unlike the Protractor, it is not a left-right mirror.
  */
 export function vectorRays(values, angle, r, { clockwise = true, cx = 0, cy = 0 } = {}) {
-  return values.map((value) => ({ value, ...wheelPoint(value, r, { clockwise, angle, cx, cy }) }));
+  return values.map((value) => ({
+    value,
+    ...wheelPoint(angle + (clockwise ? value : -value), r, { cx, cy }),
+  }));
 }
 
 /**
- * The Locator's swing line through the centre. Assumption: the bear end is
- * at the angle (the guide's 354 shows the bear end just below west).
+ * The Locator's swing line through the centre: the bear end at the angle,
+ * the bull end opposite (black-box: angle 30 puts the bear upper-left).
  */
 export function locatorLine(angle, r, { cx = 0, cy = 0 } = {}) {
   return {
@@ -54,40 +64,36 @@ export function locatorLine(angle, r, { cx = 0, cy = 0 } = {}) {
   };
 }
 
-/** Is `pt` inside (or on the edge of) the convex polygon `verts`? */
-export function pointInPolygon(pt, verts) {
-  let sign = 0;
-  for (let i = 0; i < verts.length; i++) {
-    const a = verts[i];
-    const b = verts[(i + 1) % verts.length];
-    const cross = (b.x - a.x) * (pt.y - a.y) - (b.y - a.y) * (pt.x - a.x);
-    if (Math.abs(cross) < 1e-9) continue;
-    const s = Math.sign(cross);
-    if (sign === 0) sign = s;
-    else if (s !== sign) return false;
-  }
-  return true;
-}
+const PHI = (1 + Math.sqrt(5)) / 2;
+
+/** At Radius 1 the Vortex's outermost loop reaches about 10 cells (black-box). */
+export const VORTEX_OUTER_CELLS = 10;
 
 /**
- * The grid cells a polygon's highlight shades, as "row,col" matrix keys.
- * Assumption: a cell counts when its centre is inside the polygon, and the
- * polygon's radius is half the grid side. With clockwise off the grid is
- * drawn mirrored, so the matrix column is mirrored too.
+ * One Vortex spiral: a golden spiral whose radius shrinks by phi every
+ * quarter turn, starting from its outermost point at `angle` and winding
+ * inward - clockwise for the bull spiral, anticlockwise for the bear.
+ * Radius scales it linearly (black-box: Radius 2 doubles both spirals).
+ *
+ * @param {number} angle - screen angle of the outer end (0 = west)
+ * @param {number} radius - Gannzilla's Radius setting
+ * @param {number} unit - pixels per cell
  */
-export function polygonCells(dimension, sides, angle, { clockwise = true } = {}) {
-  const middle = (dimension - 1) / 2;
-  const verts = polygonVertices(sides, angle, dimension / 2);
-  const cells = new Set();
-  for (let row = 0; row < dimension; row++) {
-    for (let screenCol = 0; screenCol < dimension; screenCol++) {
-      if (pointInPolygon({ x: screenCol - middle, y: row - middle }, verts)) {
-        const col = clockwise ? screenCol : dimension - 1 - screenCol;
-        cells.add(`${row},${col}`);
-      }
-    }
+export function vortexSpiral(angle, radius, unit, { bull = true, cx = 0, cy = 0, turns = 4, steps = 480 } = {}) {
+  const outer = VORTEX_OUTER_CELLS * radius * unit;
+  const points = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = (i / steps) * turns * 360;
+    const r = outer * PHI ** (-t / 90);
+    points.push(wheelPoint(angle + (bull ? t : -t), r, { cx, cy }));
   }
-  return cells;
+  return points;
+}
+
+/** The Vortex's eight axes: angle + k*45 deg, out to its outermost loop. */
+export function vortexAxes(angle, radius, unit, { cx = 0, cy = 0 } = {}) {
+  const outer = VORTEX_OUTER_CELLS * radius * unit;
+  return Array.from({ length: 8 }, (_, k) => wheelPoint(angle + k * 45, outer, { cx, cy }));
 }
 
 /** Every figure hidden: Gannzilla's starting state. */
@@ -99,5 +105,6 @@ export function defaultFigures() {
     ])),
     vectors: { visible: false, clockwise: true, angle: 0, values: DEFAULT_VECTORS },
     locator: { visible: false, angle: 0 },
+    vortex: { visible: false, angle: 0, trend: 'Both', price: 1, radius: 1 },
   };
 }

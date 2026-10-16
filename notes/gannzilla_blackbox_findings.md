@@ -70,3 +70,20 @@ Positions use x to the right, y down, and 1 at the centre unless stated.
   - The west row holds the centred square numbers 1, 5, 13, 25, 41.
 - **Pentagon** [20]: ring k has 5k cells and ends at the west vertex. The west row holds 1, 6, 16, 31 (centred pentagonal numbers).
   - Expected but not inspected: Hexagon, Heptagon and Octagon follow the same rule with 6k, 7k and 8k cells.
+
+## Figures (black-box run 2, 2026-10-15)
+
+Tested on the "ClaudeTest" chart, Square of 9 Size 5. The user's Default chart was not changed.
+
+- **Size:** polygons and Vectors reach the grid's corners. Their radius is half the grid's *diagonal*, not half its side. A Square at 0 touches the corner cells' circle.
+- **Show highlight** fills the polygon with a see-through colour. It does not pick out a set of cells. With it off, only the outline is drawn.
+- **Locator:** the bear end sits at the Angle (clockwise from west) and the bull end is opposite. Angle 30 puts the bear at the upper left.
+- **Vectors, Clockwise off:** this is *not* a left-right mirror. The base line stays where Angle puts it (clockwise from west). Only the rays turn the other way, so each ray sits at Angle − value.
+  - Base 30, ray 23.6 sits 6.4° above west.
+  - Base 0, ray 100 points almost south.
+- **Figures ignore the Cosmogram's Angle and Clockwise.** With the Cosmogram at Angle 90, the zodiac turns but a Triangle at 0 still points west.
+- **Vortex:** two golden spirals, the bull in green and the bear in pink, winding opposite ways, plus 8 grey axes every 45° from its Angle.
+  - **Radius:** scales both spirals linearly. Radius 2 doubles them.
+  - **Size at Radius 1:** the outermost loop reaches about 10 cells.
+  - **Price:** the cell the Vortex is centred on. Price 9 moves it to cell 9.
+  - **Approximate:** the exact radii where the spirals cross the axes could not be read precisely, so GannSq9 models them as r = 10·Radius·φ^(−t/90°), measured inward from the Angle.
