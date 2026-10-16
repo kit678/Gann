@@ -68,6 +68,8 @@ function usePlanets(datetime, system, enabled) {
   useEffect(() => {
     if (!enabled) return undefined;
     let cancelled = false;
+    // Drop the old positions so a new date never shows under the old numbers.
+    setBodies(null);
     setError(null);
     getPlanets({ datetime, system })
       .then((data) => { if (!cancelled) setBodies(data.bodies); })
@@ -145,8 +147,11 @@ const CosmogramPanel = ({
   );
 
   // Aspect lines and the table follow the transit side, or the radix side
-  // when it is the only one on.
-  const points = showTransit ? transitPoints : (showRadix ? radixPoints : []);
+  // when it is the only one with data.
+  const onTransit = showTransit && transitPoints.length > 0;
+  const points = onTransit ? transitPoints : (showRadix ? radixPoints : []);
+  // The price belongs to the transit side, so the Market column does too.
+  const showMarket = onTransit && price != null && scaleOk;
 
   const inspector = useMemo(() => {
     if (!both) return null;
@@ -341,13 +346,13 @@ const CosmogramPanel = ({
                   <th>{both ? 'Transit' : 'Longitude'}</th>
                   {both && <th title="(radix − transit) mod 360">Δ</th>}
                   <th>Sign</th>
-                  {price != null && scaleOk && <th>Market</th>}
+                  {showMarket && <th>Market</th>}
                 </tr>
               </thead>
               <tbody>
                 {points.filter((p) => p.kind !== 'price').map((p) => {
                   const s = signOf(p.lon);
-                  const market = price != null && scaleOk
+                  const market = showMarket
                     ? longitudeToPrice(p.lon, price, { multiplier, divisor }) : null;
                   return (
                     <tr key={p.name}>
