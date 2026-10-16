@@ -1,6 +1,6 @@
 import {
   POLYGONS, DEFAULT_VECTORS, polygonVertices, vectorRays, locatorLine,
-  pointInPolygon, polygonCells, defaultFigures,
+  figureRadius, vortexSpiral, vortexAxes, VORTEX_OUTER_CELLS, defaultFigures,
 } from '../gannzillaFigures';
 
 const close = (p, x, y) => {
@@ -49,10 +49,14 @@ describe('Vectors (docs §1.3, #25)', () => {
     expect(at(261.8).x).toBeGreaterThan(0);
   });
 
-  test('Clockwise off mirrors left-right', () => {
+  test('Clockwise off keeps the base and turns the rays the other way (black-box)', () => {
+    // Base 30, ray 90 anticlockwise: screen angle -60, i.e. down-left.
     const [ray] = vectorRays([90], 30, 1, { clockwise: false });
-    const [mirror] = vectorRays([90], 30, 1);
-    close(ray, -mirror.x, mirror.y);
+    close(ray, -0.5, Math.sqrt(3) / 2);
+    // Base 30, ray 23.6 anticlockwise sits 6.4 deg above west.
+    const [low] = vectorRays([23.6], 30, 1, { clockwise: false });
+    expect(low.x).toBeLessThan(-0.99);
+    expect(low.y).toBeLessThan(0);
   });
 });
 
@@ -65,38 +69,38 @@ describe('Locator (docs §1.3)', () => {
   });
 });
 
-describe('polygon highlight', () => {
-  test('pointInPolygon', () => {
-    const square = [{ x: -1, y: -1 }, { x: 1, y: -1 }, { x: 1, y: 1 }, { x: -1, y: 1 }];
-    expect(pointInPolygon({ x: 0, y: 0 }, square)).toBe(true);
-    expect(pointInPolygon({ x: 2, y: 0 }, square)).toBe(false);
-    expect(pointInPolygon({ x: 1, y: 0 }, square)).toBe(true); // edge counts
+describe('figure size', () => {
+  test('figures reach the grid corners: half the diagonal', () => {
+    expect(figureRadius(100)).toBeCloseTo(70.7107, 4);
+  });
+});
+
+describe('Vortex (black-box)', () => {
+  test('starts at the angle, 10 cells out at Radius 1, and shrinks by phi per quarter turn', () => {
+    const pts = vortexSpiral(0, 1, 1, { steps: 16, turns: 1 });
+    close(pts[0], -VORTEX_OUTER_CELLS, 0);
+    const phi = (1 + Math.sqrt(5)) / 2;
+    // A quarter turn clockwise from west is north.
+    close(pts[4], 0, -VORTEX_OUTER_CELLS / phi);
   });
 
-  test('a Square at 0 (a diamond) on 5x5 holds the 13 cells within Manhattan distance 2', () => {
-    const cells = polygonCells(5, 4, 0);
-    expect(cells.has('2,2')).toBe(true);
-    expect(cells.has('2,0')).toBe(true); // west vertex row
-    expect(cells.has('0,0')).toBe(false);
-    expect(cells.size).toBe(13);
+  test('the bear spiral winds the other way', () => {
+    const bull = vortexSpiral(0, 1, 1, { steps: 16, turns: 1 });
+    const bear = vortexSpiral(0, 1, 1, { steps: 16, turns: 1, bull: false });
+    close(bear[4], bull[4].x, -bull[4].y);
   });
 
-  test('a Square at 45 (axis-aligned, inscribed in the circle) holds the middle 3x3', () => {
-    const cells = polygonCells(5, 4, 45);
-    expect(cells.size).toBe(9);
-    expect(cells.has('1,1')).toBe(true);
-    expect(cells.has('0,2')).toBe(false);
+  test('Radius scales it linearly', () => {
+    const one = vortexSpiral(0, 1, 1, { steps: 8, turns: 1 });
+    const two = vortexSpiral(0, 2, 1, { steps: 8, turns: 1 });
+    one.forEach((p, i) => close(two[i], 2 * p.x, 2 * p.y));
   });
 
-  test('anticlockwise grids mirror the columns', () => {
-    // Triangle at 0 points west; mirrored it covers the east side's columns instead.
-    const cw = polygonCells(9, 3, 0);
-    const ccw = polygonCells(9, 3, 0, { clockwise: false });
-    expect(cw.size).toBe(ccw.size);
-    cw.forEach((key) => {
-      const [row, col] = key.split(',').map(Number);
-      expect(ccw.has(`${row},${8 - col}`)).toBe(true);
-    });
+  test('eight axes every 45 deg from the angle', () => {
+    const axes = vortexAxes(0, 1, 1);
+    expect(axes).toHaveLength(8);
+    close(axes[0], -10, 0);
+    close(axes[2], 0, -10);
   });
 });
 
@@ -107,4 +111,5 @@ test('defaultFigures: every figure hidden, Vectors at the guide list', () => {
   expect(Object.values(f.polygons).every((p) => !p.visible && !p.highlight && p.angle === 0)).toBe(true);
   expect(f.vectors).toEqual({ visible: false, clockwise: true, angle: 0, values: DEFAULT_VECTORS });
   expect(f.locator).toEqual({ visible: false, angle: 0 });
+  expect(f.vortex).toEqual({ visible: false, angle: 0, trend: 'Both', price: 1, radius: 1 });
 });

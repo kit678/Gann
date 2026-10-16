@@ -33,6 +33,7 @@ const FiguresPanel = ({ figures, onChange }) => {
   });
   const setVectors = (patch) => onChange({ ...figures, vectors: { ...figures.vectors, ...patch } });
   const setLocator = (patch) => onChange({ ...figures, locator: { ...figures.locator, ...patch } });
+  const setVortex = (patch) => onChange({ ...figures, vortex: { ...figures.vortex, ...patch } });
 
   const onValues = (text) => {
     setValuesText(text);
@@ -41,7 +42,8 @@ const FiguresPanel = ({ figures, onChange }) => {
   };
 
   const shown = POLYGONS.filter(({ sides }) => figures.polygons[sides].visible).length
-    + (figures.vectors.visible ? 1 : 0) + (figures.locator.visible ? 1 : 0);
+    + (figures.vectors.visible ? 1 : 0) + (figures.locator.visible ? 1 : 0)
+    + (figures.vortex.visible ? 1 : 0);
 
   return (
     <div className="card mt-3">
@@ -103,9 +105,32 @@ const FiguresPanel = ({ figures, onChange }) => {
               <label htmlFor="locAngle" className="me-2">Angle</label>
               <AngleInput id="locAngle" value={figures.locator.angle}
                           onChange={(angle) => setLocator({ angle })} />
+
+              <div className="fw-semibold mt-3 mb-1">Vortex</div>
+              <Check id="vtxVisible" label="Visible" checked={figures.vortex.visible}
+                     onChange={(visible) => setVortex({ visible })} />
+              <select className="form-select form-select-sm d-inline-block" style={{ width: 'auto' }}
+                      aria-label="Vortex trend" value={figures.vortex.trend}
+                      onChange={(e) => setVortex({ trend: e.target.value })}>
+                <option>Both</option>
+                <option>Bull trend</option>
+                <option>Bear trend</option>
+              </select>
+              <div className="mt-1">
+                <label htmlFor="vtxAngle" className="me-2">Angle</label>
+                <AngleInput id="vtxAngle" value={figures.vortex.angle}
+                            onChange={(angle) => setVortex({ angle })} />
+                <label htmlFor="vtxPrice" className="mx-2">Price</label>
+                <AngleInput id="vtxPrice" value={figures.vortex.price}
+                            onChange={(price) => setVortex({ price })} />
+                <label htmlFor="vtxRadius" className="mx-2">Radius</label>
+                <AngleInput id="vtxRadius" value={figures.vortex.radius}
+                            onChange={(radius) => setVortex({ radius })} />
+              </div>
               <div className="text-muted mt-2" style={{ maxWidth: '22rem' }}>
                 Angles: 0° at west, growing clockwise. Figures sit on the grid centre (cell 1)
-                and on the Cosmogram&apos;s centre.
+                and on the Cosmogram&apos;s centre; the Vortex sits on the cell holding its Price
+                (Square of 9 only).
               </div>
             </div>
           </div>

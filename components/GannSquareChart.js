@@ -7,7 +7,7 @@ import { buildLadder } from '../utils/gannLevels';
 import { fitView, zoomAt, visibleCellRange, MIN_ZOOM, MAX_ZOOM } from '../utils/gannView';
 import { cellValue, findCell } from '../utils/gannzillaGrid';
 import {
-  POLYGONS, polygonVertices, polygonCells, vectorRays, locatorLine,
+  POLYGONS, polygonVertices, vectorRays, locatorLine, figureRadius, vortexSpiral, vortexAxes,
 } from '../utils/gannzillaFigures';
 import { angleOf } from './FiguresPanel';
 import { FIGURE_COLORS } from './FigureOverlay';
@@ -206,19 +206,12 @@ const GannSquareChart = ({
   const tooLarge = sunGrid.tooLarge;
   const dimension = sunGrid.dimension;
 
-  // Gannzilla's Figures: the visible polygons, and the cells their highlight shades.
+  // Gannzilla's Figures: the visible polygons. Their highlight is a translucent
+  // fill of the polygon itself, not a set of cells (black-box).
   const shownPolygons = useMemo(() => (!figures || figures.hide ? [] : POLYGONS
     .filter(({ sides }) => figures.polygons[sides].visible)
     .map(({ sides }) => ({ sides, ...figures.polygons[sides], angle: angleOf(figures.polygons[sides].angle) }))),
   [figures]);
-  const figureCells = useMemo(() => {
-    const cells = new Set();
-    if (!dimension) return cells;
-    shownPolygons.filter((p) => p.highlight).forEach((p) => {
-      polygonCells(dimension, p.sides, p.angle, { clockwise }).forEach((k) => cells.add(k));
-    });
-    return cells;
-  }, [shownPolygons, dimension, clockwise]);
 
   // Report levels upward so the page can render them outside the canvas.
   useEffect(() => {
@@ -407,11 +400,6 @@ const GannSquareChart = ({
           ctx.fillRect(x, y, cellSize, cellSize);
         }
 
-        if (figureCells.has(key)) {
-          ctx.fillStyle = FIGURE_COLORS.highlight;
-          ctx.fillRect(x, y, cellSize, cellSize);
-        }
-
         if (value === 1) {
           ctx.fillStyle = COLORS.center;
           ctx.fillRect(x, y, cellSize, cellSize);
@@ -495,11 +483,11 @@ const GannSquareChart = ({
       }
     }
 
-    // Figures, centred on cell 1 with a radius of half the grid. Their angles
+    // Figures, centred on cell 1 and reaching the grid's corners. Their angles
     // are screen angles, so they are not mirrored with an anticlockwise grid.
     if (figures && !figures.hide) {
       const at = { cx: gridPx / 2, cy: gridPx / 2 };
-      const r = gridPx / 2;
+      const r = figureRadius(gridPx);
       const labelPx = 12 / view.zoom;
       ctx.font = `${labelPx}px Arial`;
       const label = (p, text, color) => {
@@ -517,11 +505,15 @@ const GannSquareChart = ({
         ctx.beginPath();
         verts.forEach((v, i) => (i === 0 ? ctx.moveTo(v.x, v.y) : ctx.lineTo(v.x, v.y)));
         ctx.closePath();
+        if (p.highlight) {
+          ctx.fillStyle = FIGURE_COLORS.highlight;
+          ctx.fill();
+        }
         ctx.stroke();
         verts.forEach((v) => label(v, v.label, FIGURE_COLORS.polygon));
       });
 
-      const { vectors, locator } = figures;
+      const { vectors, locator, vortex } = figures;
       if (vectors.visible) {
         ctx.strokeStyle = FIGURE_COLORS.vector;
         vectorRays(vectors.values, angleOf(vectors.angle), r, { clockwise: vectors.clockwise, ...at })
@@ -551,13 +543,42 @@ const GannSquareChart = ({
           label(p, text, color);
         });
       }
+
+      // Vortex: centred on the cell holding its Price (black-box: Price 9 moves it to cell 9).
+      const vortexCell = vortex && vortex.visible ? findCell(Number(vortex.price), grid) : null;
+      const vortexAt = vortexCell && sunGrid.positionSequence[vortexCell - 1];
+      if (vortexAt) {
+        const centre = {
+          cx: colX(vortexAt.col) + cellSize / 2,
+          cy: vortexAt.row * cellSize + cellSize / 2,
+        };
+        const vAngle = angleOf(vortex.angle);
+        const vRadius = Number(vortex.radius) > 0 ? Number(vortex.radius) : 1;
+        ctx.strokeStyle = '#9e9e9e';
+        vortexAxes(vAngle, vRadius, cellSize, centre).forEach((end) => {
+          ctx.beginPath();
+          ctx.moveTo(centre.cx, centre.cy);
+          ctx.lineTo(end.x, end.y);
+          ctx.stroke();
+        });
+        const spirals = [];
+        if (vortex.trend !== 'Bear trend') spirals.push([true, FIGURE_COLORS.bull]);
+        if (vortex.trend !== 'Bull trend') spirals.push([false, FIGURE_COLORS.bear]);
+        spirals.forEach(([bull, color]) => {
+          ctx.strokeStyle = color;
+          ctx.beginPath();
+          vortexSpiral(vAngle, vRadius, cellSize, { bull, ...centre })
+            .forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
+          ctx.stroke();
+        });
+      }
     }
 
     ctx.restore();
   }, [
     view, cellSize, dimension, tooLarge, highlightSpokes,
     showSun, showMoon, sunGrid, moonGrid, sunLevels, moonLevels,
-    clockwise, toPrice, findIndex, projectedGlyphs, figures, shownPolygons, figureCells,
+    clockwise, toPrice, findIndex, projectedGlyphs, figures, shownPolygons, grid,
   ]);
 
   if (tooLarge) {
