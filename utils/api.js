@@ -253,6 +253,17 @@ export const getTimeTools = async ({
   return response.data;
 };
 
+/**
+ * All twelve Gannzilla bodies. `datetime` is a 'YYYY-MM-DDTHH:mm' wall-clock
+ * time read as US Eastern with DST (the same as getCelestial).
+ */
+export const getPlanets = async ({ datetime = null, system = 'geocentric' } = {}) => {
+  const params = { system };
+  if (datetime) params.datetime = datetime;
+  const response = await api.get('/api/planets', { params });
+  return response.data;
+};
+
 // Gann Levels
 export const getLevelsForTicker = async (
   ticker,

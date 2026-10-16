@@ -27,6 +27,7 @@ const COLORS = {
   moonCross: 'rgba(160, 80, 220, 0.55)',
   conjunctCell: 'rgba(214, 150, 90, 0.8)',
   find: 'rgba(20, 20, 20, 0.95)',
+  projection: 'rgba(106, 27, 154, 0.95)',
   upFill: 'rgba(0, 200, 0, 0.4)',
   downFill: 'rgba(255, 0, 0, 0.4)',
   upRing: 'rgba(0, 160, 0, 0.95)',
@@ -94,6 +95,7 @@ const GannSquareChart = ({
   gridIncrement = 1,
   clockwise = true,
   findValue = null,
+  projections = [],
   markCount = 8,
   onLevelsChange,
   onLaddersChange,
@@ -115,6 +117,17 @@ const GannSquareChart = ({
   const moonDegree =
     moonPosition == null ? null : normalizeBodyDegree(moonPosition, 71, zeroDegreeOffset);
   const isConjunct = moonDegree !== null && moonDegree === sunDegree;
+
+  // Gannzilla's Projections: each body's glyph on the cell whose number is
+  // its whole-degree longitude, using the same 0-degree line as the Sun.
+  const projectedGlyphs = useMemo(() => {
+    const byCell = new Map();
+    projections.forEach(({ glyph, longitude }) => {
+      const cell = normalizeBodyDegree(longitude, 71, zeroDegreeOffset);
+      byCell.set(cell, `${byCell.get(cell) || ''}${glyph}`);
+    });
+    return byCell;
+  }, [projections, zeroDegreeOffset]);
 
   // Build one grid per visible body. The spiral itself is identical; only the
   // recorded body position differs, so levels differ. Skipped entirely while
@@ -443,6 +456,16 @@ const GannSquareChart = ({
         if (drawLabels) {
           ctx.fillStyle = COLORS.text;
           ctx.fillText(formatCell(toPrice(value)), x + cellSize / 2, y + cellSize / 2);
+          const glyphs = projectedGlyphs.get(value);
+          if (glyphs) {
+            ctx.save();
+            ctx.font = `${Math.max(8, cellSize * 0.28)}px Arial`;
+            ctx.fillStyle = COLORS.projection;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText(glyphs, x + 2, y + 1);
+            ctx.restore();
+          }
         }
       }
     }
@@ -451,7 +474,7 @@ const GannSquareChart = ({
   }, [
     view, cellSize, dimension, tooLarge, highlightSpokes,
     showSun, showMoon, sunGrid, moonGrid, sunLevels, moonLevels,
-    clockwise, toPrice, findIndex,
+    clockwise, toPrice, findIndex, projectedGlyphs,
   ]);
 
   if (tooLarge) {
