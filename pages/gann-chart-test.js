@@ -4,6 +4,7 @@ import GannSquareChart from '../components/GannSquareChart';
 import LevelLadderTable from '../components/LevelLadderTable';
 import TimeToolsPanel from '../components/TimeToolsPanel';
 import CosmogramPanel from '../components/CosmogramPanel';
+import LayoutViewer from '../components/LayoutViewer';
 import { getLevelsForTicker, getCelestial } from '../utils/api';
 import { ZERO_DEGREE_PRESETS, DEFAULT_ZERO_DEGREE_OFFSET } from '../utils/gannGrid';
 import { nearestCell } from '../utils/gannzillaGrid';
@@ -461,6 +462,16 @@ const GannChartTest = () => {
 
         {/* The picker's ET wall-clock time doubles as Gannzilla's New York
             base time (Gannzilla ignores daylight saving). */}
+        {!shownError && (
+          <LayoutViewer
+            gridValue={gridValue}
+            gridIncrement={gridIncrement}
+            clockwise={clockwise}
+            price={levelsData ? Number(levelsData.price) : null}
+            findValue={findValue}
+          />
+        )}
+
         <CosmogramPanel
           datetime={selectedDateTime || null}
           price={levelsData ? Number(levelsData.price) : null}
