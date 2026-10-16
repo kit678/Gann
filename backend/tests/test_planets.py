@@ -18,6 +18,10 @@ from app.utils.ephemeris import (
     calculate_body_position, calculate_all_positions, BODIES,
     GANNZILLA_STD_OFFSETS, gannzilla_local_to_utc,
 )
+from fastapi.testclient import TestClient
+from app.main import app
+
+client = TestClient(app)
 
 
 class TestEphemerisFiles(unittest.TestCase):
@@ -125,6 +129,45 @@ class TestGannzillaTime(unittest.TestCase):
                 "Sydney", "Tokyo", "Toronto", "Wellington", "Zurich",
             ]),
         )
+
+
+class TestPlanetsEndpoint(unittest.TestCase):
+    """GET /api/planets exposes all bodies with either time rule."""
+
+    def test_gannzilla_mode_new_york_matches_the_guide(self):
+        response = client.get("/api/planets", params={
+            "datetime": "2000-01-01T00:00", "time_mode": "gannzilla", "city": "New York",
+        })
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["datetime_utc"], "2000-01-01T05:00:00Z")
+        self.assertEqual(body["system"], "geocentric")
+        self.assertAlmostEqual(body["bodies"]["Jupiter"]["longitude"], 25.25, delta=0.03)
+        self.assertEqual(len(body["bodies"]), 12)
+
+    def test_default_mode_is_us_eastern_with_dst(self):
+        """Matches /api/celestial: 2026-10-15 00:00 ET is EDT, so 04:00 UTC."""
+        response = client.get("/api/planets", params={"datetime": "2026-10-15T00:00"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["datetime_utc"], "2026-10-15T04:00:00Z")
+
+    def test_heliocentric_has_ten_bodies(self):
+        response = client.get("/api/planets", params={
+            "datetime": "2000-01-01T00:00", "system": "heliocentric",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["system"], "heliocentric")
+        self.assertEqual(len(response.json()["bodies"]), 10)
+
+    def test_bad_inputs_are_400(self):
+        for params in (
+            {"datetime": "nope"},
+            {"system": "barycentric"},
+            {"time_mode": "gannzilla", "city": "Atlantis", "datetime": "2000-01-01T00:00"},
+            {"time_mode": "lunar"},
+        ):
+            with self.subTest(params=params):
+                self.assertEqual(client.get("/api/planets", params=params).status_code, 400)
 
 
 if __name__ == "__main__":
