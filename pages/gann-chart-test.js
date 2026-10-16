@@ -61,7 +61,12 @@ const GannChartTest = () => {
   const [figures, setFigures] = useState(defaultFigures);
   // Gannzilla's Data type (Price / Date / Time / Price and date / Price and time).
   const [dataTypeSettings, setDataTypeSettings] = useState(
-    () => defaultDataType(new Date().toISOString().slice(0, 10))
+    () => {
+      // Local calendar date, not UTC, so an evening session still starts today.
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      return defaultDataType(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`);
+    }
   );
 
   // Live-polled positions. Null means "use whatever came back with the price".
