@@ -358,8 +358,8 @@ const GannSquareChart = ({
     ctx.textBaseline = 'middle';
     ctx.font = `${Math.max(10, cellSize * 0.4)}px Arial`;
 
-    const colFrom = clockwise ? range.colStart : 0;
-    const colTo = clockwise ? range.colEnd : dimension - 1;
+    const colFrom = clockwise ? range.colStart : dimension - 1 - range.colEnd;
+    const colTo = clockwise ? range.colEnd : dimension - 1 - range.colStart;
     for (let row = range.rowStart; row <= range.rowEnd; row++) {
       for (let col = colFrom; col <= colTo; col++) {
         const value = sunGrid.matrix[row][col];
@@ -506,7 +506,7 @@ const GannSquareChart = ({
         <Swatch color={COLORS.center} label={`Center (${formatCell(gridValue)})`} />
         <Swatch color={COLORS.oddSquare} label="Odd squares (9, 25, 49...)" />
         <Swatch color={COLORS.target} label="Price square" />
-        {findIndex !== null && <Swatch color="transparent" border={COLORS.find} label="Find" />}
+        {findIndex !== null && findIndex <= dimension * dimension && <Swatch color="transparent" border={COLORS.find} label="Find" />}
         {showSun && <Swatch color={COLORS.sunCell} label="Sun" />}
         {showMoon && moonGrid && <Swatch color={COLORS.moonCell} label="Moon" />}
         {isConjunct && showSun && showMoon && (

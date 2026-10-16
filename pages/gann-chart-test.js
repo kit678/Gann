@@ -38,8 +38,8 @@ const GannChartTest = () => {
   // Gannzilla's grid: the centre cell shows Value and each step adds
   // Increment. 0.1 / 0.1 is the old "x10 on"; 1 / 1 is the old "x10 off".
   // Which reads better is judged per ticker by eye, so it stays a manual choice.
-  const [gridValue, setGridValue] = useState(0.1);
-  const [gridIncrement, setGridIncrement] = useState(0.1);
+  const [gridValueInput, setGridValueInput] = useState('0.1');
+  const [gridIncrementInput, setGridIncrementInput] = useState('0.1');
   const [clockwise, setClockwise] = useState(true);
   const [findInput, setFindInput] = useState('');
   const [ladders, setLadders] = useState(null);
@@ -121,9 +121,17 @@ const GannChartTest = () => {
   };
 
   // Price -> grid square: the cell whose value is nearest the price.
-  const gridOptions = { value: gridValue, increment: gridIncrement };
-  const targetNumber =
-    nearestCell(levelsData ? levelsData.price : 81, gridOptions) ?? 1;
+  const gridValue = Number(gridValueInput);
+  const gridIncrement = Number(gridIncrementInput);
+  const gridError =
+    !Number.isFinite(gridValue) || gridValueInput.trim() === '' ? 'Value must be a number.'
+    : !(gridIncrement > 0) ? 'Increment must be greater than 0.'
+    : null;
+  const priceCell = gridError
+    ? null
+    : nearestCell(levelsData ? levelsData.price : 81, { value: gridValue, increment: gridIncrement });
+  const shownError = gridError ?? (priceCell === null ? 'Price is below Value.' : null);
+  const targetNumber = priceCell;
   const findValue = findInput.trim() === '' ? null : Number(findInput);
 
   const sunDegree = livePositions
@@ -282,8 +290,8 @@ const GannChartTest = () => {
                     Value
                   </label>
                   <input type="number" step="any" id="gridValue" className="form-control form-control-sm"
-                         value={gridValue}
-                         onChange={(e) => setGridValue(Number(e.target.value))} />
+                         value={gridValueInput}
+                         onChange={(e) => setGridValueInput(e.target.value)} />
                 </div>
                 <div className="d-flex mt-1" style={{ gap: '0.5rem' }}>
                   <label className="form-label mb-0" htmlFor="gridIncrement" style={{ width: '4.5rem' }}>
@@ -291,9 +299,10 @@ const GannChartTest = () => {
                   </label>
                   <input type="number" step="any" min="0" id="gridIncrement"
                          className="form-control form-control-sm"
-                         value={gridIncrement}
-                         onChange={(e) => setGridIncrement(Number(e.target.value))} />
+                         value={gridIncrementInput}
+                         onChange={(e) => setGridIncrementInput(e.target.value)} />
                 </div>
+                {shownError && <div className="text-danger small mt-1">{shownError}</div>}
                 <div className="d-flex mt-1" style={{ gap: '0.5rem' }}>
                   <label className="form-label mb-0" htmlFor="findInput" style={{ width: '4.5rem' }}>
                     Find
@@ -332,7 +341,7 @@ const GannChartTest = () => {
                         {levelsData.price_date ? `as of ${levelsData.price_date}` : '(live)'}
                       </span>
                       <span className="ms-2 text-muted">
-                        → square {targetNumber} (Value {gridValue}, Increment {gridIncrement})
+                        {!shownError && <>→ square {targetNumber} (Value {gridValue}, Increment {gridIncrement})</>}
                       </span>
                     </div>
                     <div>
@@ -386,6 +395,7 @@ const GannChartTest = () => {
           </div>
         </div>
 
+        {!shownError && (
         <GannSquareChart
           targetNumber={targetNumber}
           sunPosition={sunDegree}
@@ -403,6 +413,7 @@ const GannChartTest = () => {
           onLevelsChange={setChartLevels}
           onLaddersChange={setLadders}
         />
+        )}
 
         {ladders && (
           <div className="card mt-4">
