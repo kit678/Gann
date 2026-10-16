@@ -57,14 +57,19 @@ function wedge(from, to, rOut, rIn, opts) {
  * every body, the price point, Summary/Average and aspect lines, plus the
  * planet table with its Market (price-equivalent) column.
  */
-const CosmogramPanel = ({ datetime = null, price = null, onBodiesChange }) => {
+const CosmogramPanel = ({ datetime = null, price: rawPrice = null, onBodiesChange }) => {
+  // A missing or malformed price hides the price point and Market column.
+  const price = Number.isFinite(rawPrice) ? rawPrice : null;
   const [system, setSystem] = useState('geocentric');
   const [clockwise, setClockwise] = useState(true);
   const [angle, setAngle] = useState(0);
   const [chronoRange, setChronoRange] = useState('annual');
   const [showAspects, setShowAspects] = useState(true);
-  const [multiplier, setMultiplier] = useState(1);
-  const [divisor, setDivisor] = useState(1);
+  // Raw strings, so a box can be cleared while typing; numbers are derived.
+  const [multiplierInput, setMultiplierInput] = useState('1');
+  const [divisorInput, setDivisorInput] = useState('1');
+  const multiplier = Number(multiplierInput);
+  const divisor = Number(divisorInput);
   const [bodies, setBodies] = useState(null);
   const [error, setError] = useState(null);
 
@@ -73,7 +78,11 @@ const CosmogramPanel = ({ datetime = null, price = null, onBodiesChange }) => {
     setError(null);
     getPlanets({ datetime, system })
       .then((data) => { if (!cancelled) setBodies(data.bodies); })
-      .catch((err) => { if (!cancelled) setError(err.response?.data?.detail || err.message); });
+      .catch((err) => {
+        if (cancelled) return;
+        setBodies(null);
+        setError(err.response?.data?.detail || err.message);
+      });
     return () => { cancelled = true; };
   }, [datetime, system]);
 
@@ -149,12 +158,12 @@ const CosmogramPanel = ({ datetime = null, price = null, onBodiesChange }) => {
           </div>
           <label className="small mb-0" htmlFor="cosmoMult">Price ×</label>
           <input type="number" id="cosmoMult" className="form-control form-control-sm"
-                 style={{ width: '4.5rem' }} min="0" step="any" value={multiplier}
-                 onChange={(e) => setMultiplier(Number(e.target.value))} />
+                 style={{ width: '4.5rem' }} min="0" step="any" value={multiplierInput}
+                 onChange={(e) => setMultiplierInput(e.target.value)} />
           <label className="small mb-0" htmlFor="cosmoDiv">÷</label>
           <input type="number" id="cosmoDiv" className="form-control form-control-sm"
-                 style={{ width: '4.5rem' }} min="0" step="any" value={divisor}
-                 onChange={(e) => setDivisor(Number(e.target.value))} />
+                 style={{ width: '4.5rem' }} min="0" step="any" value={divisorInput}
+                 onChange={(e) => setDivisorInput(e.target.value)} />
         </div>
 
         {error && <div className="text-danger small">{error}</div>}
