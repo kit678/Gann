@@ -114,5 +114,35 @@ class TestEclipses(unittest.TestCase):
         self.assertEqual(e["lunar"]["utc"].date(), date(2021, 5, 26))
 
 
+class TestTimeToolsEndpoint(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        cls.client = TestClient(app)
+
+    def test_returns_cycles_phases_and_eclipses(self):
+        r = self.client.get("/api/time-tools", params={
+            "datetime": "2026-10-15T00:00", "city": "New York", "reverse": "false",
+            "pentagram": "None", "hexagram": "Mars",
+        })
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual(body["base_utc"], "2026-10-15T05:00:00Z")
+        self.assertEqual([v["date"] for v in body["cycles"]["tetragram"]],
+                         ["2026-10-15", "2027-01-12", "2027-04-12", "2027-07-14"])
+        self.assertIsNone(body["cycles"]["pentagram"])
+        self.assertEqual(len(body["cycles"]["hexagram"]), 6)
+        self.assertEqual(len(body["moon_phases"]), 5)
+        self.assertEqual(body["eclipses"]["lunar"]["local"][:10], "2028-12-31")
+
+    def test_bad_inputs_are_400(self):
+        for params in ({"datetime": "nope"}, {"city": "Atlantis"}, {"tetragram": "Vulcan"},
+                       {"datetime": "1000-01-01T00:00"}):
+            with self.subTest(params=params):
+                self.assertEqual(self.client.get("/api/time-tools", params=params).status_code, 400)
+
+
 if __name__ == "__main__":
     unittest.main()

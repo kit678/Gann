@@ -26,6 +26,7 @@ from ..utils.ephemeris import (
     calculate_all_positions,
     gannzilla_local_to_utc,
 )
+from ..utils.gann_time import cycle_dates, moon_phases, next_eclipses
 from ..utils.levels_calculator import (
     calculate_levels_for_ticker,
     calculate_levels_for_tickers,
@@ -227,6 +228,72 @@ async def get_planet_positions(
     except Exception as e:
         logger.error(f"Error computing planet positions: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+_CYCLE_PARTS = {"tetragram": 4, "pentagram": 5, "hexagram": 6}
+
+
+@router.get("/time-tools")
+async def get_time_tools(
+    datetime_local: Optional[str] = Query(
+        None,
+        alias="datetime",
+        description="Optional 'YYYY-MM-DDTHH:mm' wall-clock time in the city. Defaults to now.",
+    ),
+    city: str = Query("New York", description="Gannzilla city (fixed standard offset, no DST)"),
+    tetragram: str = Query("Sun", description="Ruler body, or 'None' to skip"),
+    pentagram: str = Query("Sun", description="Ruler body, or 'None' to skip"),
+    hexagram: str = Query("Sun", description="Ruler body, or 'None' to skip"),
+    reverse: bool = Query(True, description="Count cycle dates backward from the base"),
+):
+    """Gannzilla's cycles, moon octant phases and next eclipses for a base instant."""
+    try:
+        if datetime_local is None:
+            base = datetime.now(UTC)
+        else:
+            try:
+                naive = datetime.fromisoformat(datetime_local)
+            except ValueError:
+                raise ValueError(
+                    f"Invalid datetime '{datetime_local}'. Expected format YYYY-MM-DDTHH:mm."
+                )
+            base = gannzilla_local_to_utc(naive, city)
+
+        rulers = {"tetragram": tetragram, "pentagram": pentagram, "hexagram": hexagram}
+        cycles = {
+            name: (
+                None if ruler == "None" else [
+                    {
+                        "vertex": v["vertex"],
+                        "angle": v["angle"],
+                        "utc": v["utc"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "date": v["date"].isoformat(),
+                    }
+                    for v in cycle_dates(ruler, base, _CYCLE_PARTS[name], reverse, city)
+                ]
+            )
+            for name, ruler in rulers.items()
+        }
+
+        def stamp(item):
+            return {
+                "utc": item["utc"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "local": item["local"].strftime("%Y-%m-%dT%H:%M"),
+            }
+
+        phases = [{"angle": p["angle"], "name": p["name"], **stamp(p)} for p in moon_phases(base, city)]
+        eclipses = {kind: stamp(e) for kind, e in next_eclipses(base, city).items()}
+    except (ValueError, OverflowError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {
+        "base_utc": base.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "city": city,
+        "reverse": reverse,
+        "cycles": cycles,
+        "moon_phases": phases,
+        "eclipses": eclipses,
+    }
 
 
 @router.get("/sun", response_model=SunPositionResponse)

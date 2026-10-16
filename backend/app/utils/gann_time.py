@@ -19,7 +19,7 @@ from typing import Dict, List, Optional
 
 import swisseph as swe
 
-from .ephemeris import BODIES, GANNZILLA_STD_OFFSETS, initialize_ephemeris
+from .ephemeris import BODIES, GANNZILLA_STD_OFFSETS, SUPPORTED_YEARS, initialize_ephemeris
 
 # Search step in days. Small enough that no body (the Sun included) moves
 # more than a few degrees between samples, so a crossing is never skipped.
@@ -31,7 +31,12 @@ _UNIX_EPOCH_JD = 2440587.5
 
 
 def _jd(when: datetime.datetime) -> float:
-    """Julian day (UT) of a timezone-aware datetime."""
+    """Julian day (UT) of a timezone-aware datetime, inside the bundled data's range."""
+    if not SUPPORTED_YEARS[0] <= when.year <= SUPPORTED_YEARS[1]:
+        raise ValueError(
+            f"Date {when:%Y-%m-%d} is outside the supported range "
+            f"{SUPPORTED_YEARS[0]}-{SUPPORTED_YEARS[1]}."
+        )
     return _UNIX_EPOCH_JD + when.timestamp() / 86400.0
 
 
