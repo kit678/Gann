@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Layout from '../components/Layout';
 import GannSquareChart from '../components/GannSquareChart';
 import LevelLadderTable from '../components/LevelLadderTable';
@@ -6,10 +6,11 @@ import TimeToolsPanel from '../components/TimeToolsPanel';
 import CosmogramPanel from '../components/CosmogramPanel';
 import LayoutViewer from '../components/LayoutViewer';
 import FiguresPanel from '../components/FiguresPanel';
+import DataTypePanel, { defaultDataType, gridLabels } from '../components/DataTypePanel';
 import { defaultFigures } from '../utils/gannzillaFigures';
 import { getLevelsForTicker, getCelestial } from '../utils/api';
-import { ZERO_DEGREE_PRESETS, DEFAULT_ZERO_DEGREE_OFFSET } from '../utils/gannGrid';
-import { nearestCell } from '../utils/gannzillaGrid';
+import { ZERO_DEGREE_PRESETS, DEFAULT_ZERO_DEGREE_OFFSET, MAX_CELLS } from '../utils/gannGrid';
+import { nearestCell, cellValue } from '../utils/gannzillaGrid';
 
 // Stable empty list, so hiding projections doesn't hand the chart a new array every render.
 const NO_PROJECTIONS = [];
@@ -58,6 +59,10 @@ const GannChartTest = () => {
   const [showLadder, setShowLadder] = useState(false);
   // Gannzilla's Figures, shared by the Square of 9 and the Cosmogram.
   const [figures, setFigures] = useState(defaultFigures);
+  // Gannzilla's Data type (Price / Date / Time / Price and date / Price and time).
+  const [dataTypeSettings, setDataTypeSettings] = useState(
+    () => defaultDataType(new Date().toISOString().slice(0, 10))
+  );
 
   // Live-polled positions. Null means "use whatever came back with the price".
   const [livePositions, setLivePositions] = useState(null);
@@ -146,6 +151,13 @@ const GannChartTest = () => {
   const shownError = gridError ?? (priceCell === null ? 'Price is below Value.' : null);
   const targetNumber = priceCell;
   const findValue = findInput.trim() === '' ? null : Number(findInput);
+
+  // Date/Time labels for the grids. Price-only keeps the charts' own labels.
+  const labels = useMemo(() => gridLabels(
+    dataTypeSettings,
+    (n) => String(Math.round(cellValue(n, { value: gridValue, increment: gridIncrement }) * 10000) / 10000),
+    MAX_CELLS,
+  ), [dataTypeSettings, gridValue, gridIncrement]);
 
   const sunDegree = livePositions
     ? livePositions.sunDegree
@@ -417,6 +429,7 @@ const GannChartTest = () => {
         </div>
 
         <FiguresPanel figures={figures} onChange={setFigures} />
+        <DataTypePanel settings={dataTypeSettings} onChange={setDataTypeSettings} error={labels.error} />
 
         {!shownError && (
         <GannSquareChart
@@ -432,6 +445,8 @@ const GannChartTest = () => {
           gridIncrement={gridIncrement}
           clockwise={clockwise}
           findValue={findValue}
+          cellLabel={labels.cellLabel}
+          findIndexOverride={labels.findIndex}
           projections={showProjections ? projections : NO_PROJECTIONS}
           markCount={markCount}
           figures={figures}
@@ -476,6 +491,8 @@ const GannChartTest = () => {
             clockwise={clockwise}
             price={levelsData ? Number(levelsData.price) : null}
             findValue={findValue}
+            cellLabel={labels.cellLabel}
+            findIndexOverride={labels.findIndex}
           />
         )}
 

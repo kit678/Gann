@@ -155,9 +155,20 @@ export function makeTimeSequence({
  * cell 1 or past the last cell. The sequence must be increasing.
  */
 export function findSequenceCell(target, at, maxN) {
-  if (!target || maxN < 1 || target < at(1) || at(maxN + 1) <= target) return null;
+  if (!target || maxN < 1 || target < at(1)) return null;
+  // Grow the window by doubling, so the cost tracks the answer, not maxN.
   let lo = 1;
-  let hi = maxN;
+  let hi = 2;
+  while (hi <= maxN && at(hi) <= target) {
+    lo = hi;
+    hi *= 2;
+  }
+  if (hi > maxN) {
+    if (at(maxN + 1) <= target) return null;
+    hi = maxN;
+  } else {
+    hi -= 1;
+  }
   while (lo < hi) {
     const mid = Math.ceil((lo + hi) / 2);
     if (at(mid) <= target) lo = mid;
