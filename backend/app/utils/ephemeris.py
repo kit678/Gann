@@ -19,6 +19,25 @@ EPHE_PATH = os.environ.get(
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "ephe")),
 )
 
+# Gannzilla's twelve bodies, in its planet-table order.
+BODIES = {
+    "Sun": swe.SUN,
+    "Moon": swe.MOON,
+    "Mercury": swe.MERCURY,
+    "Venus": swe.VENUS,
+    "Mars": swe.MARS,
+    "Ceres": swe.CERES,
+    "Jupiter": swe.JUPITER,
+    "Saturn": swe.SATURN,
+    "Uranus": swe.URANUS,
+    "Neptune": swe.NEPTUNE,
+    "Pluto": swe.PLUTO,
+    "Eris": swe.AST_OFFSET + 136199,
+}
+
+# Seen from the Sun, the Sun has no position and the Moon rides with the Earth.
+_NOT_HELIOCENTRIC = ("Sun", "Moon")
+
 
 def initialize_ephemeris() -> None:
     """Initialize the Swiss Ephemeris library."""
@@ -50,13 +69,16 @@ def _to_utc(when: datetime.datetime = None) -> datetime.datetime:
     return when.astimezone(datetime.timezone.utc)
 
 
-def calculate_body_position(body: int, when: datetime.datetime = None) -> Dict[str, Any]:
+def calculate_body_position(
+    body: int, when: datetime.datetime = None, heliocentric: bool = False
+) -> Dict[str, Any]:
     """
     Calculate a celestial body's position in the tropical zodiac.
 
     Args:
         body: A swisseph body constant, e.g. swe.SUN or swe.MOON
         when: Timezone-aware datetime, naive (treated as UTC), or None for now
+        heliocentric: positions as seen from the Sun instead of the Earth
 
     Returns:
         dict: position data - angle, longitude, zodiac_sign, degrees_in_sign,
@@ -74,6 +96,8 @@ def calculate_body_position(body: int, when: datetime.datetime = None) -> Dict[s
     )
 
     flags = swe.FLG_SWIEPH | swe.FLG_SPEED
+    if heliocentric:
+        flags |= swe.FLG_HELCTR
     result, _ = swe.calc_ut(jd, body, flags)
 
     longitude = result[0] % 360
@@ -93,6 +117,27 @@ def calculate_body_position(body: int, when: datetime.datetime = None) -> Dict[s
         "zodiac_sign": zodiac_names[zodiac_index],
         "degrees_in_sign": degrees_in_sign,
         "angle": longitude,
+    }
+
+
+def calculate_all_positions(
+    when: datetime.datetime = None, heliocentric: bool = False
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Positions of every Gannzilla body at one instant.
+
+    Args:
+        when: Timezone-aware datetime, naive (treated as UTC), or None for now
+        heliocentric: as seen from the Sun; Sun and Moon are then omitted
+
+    Returns:
+        dict: body name -> the dict calculate_body_position returns
+    """
+    when = _to_utc(when)
+    return {
+        name: calculate_body_position(body, when, heliocentric)
+        for name, body in BODIES.items()
+        if not (heliocentric and name in _NOT_HELIOCENTRIC)
     }
 
 
