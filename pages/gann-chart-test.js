@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import GannSquareChart from '../components/GannSquareChart';
 import LevelLadderTable from '../components/LevelLadderTable';
+import TimeToolsPanel from '../components/TimeToolsPanel';
 import { getLevelsForTicker, getCelestial } from '../utils/api';
 import { ZERO_DEGREE_PRESETS, DEFAULT_ZERO_DEGREE_OFFSET } from '../utils/gannGrid';
 import { nearestCell } from '../utils/gannzillaGrid';
@@ -441,6 +442,10 @@ const GannChartTest = () => {
             </div>
           </div>
         )}
+
+        {/* The picker's ET wall-clock time doubles as Gannzilla's New York
+            base time (Gannzilla ignores daylight saving). */}
+        <TimeToolsPanel datetime={selectedDateTime || null} />
       </div>
     </Layout>
   );

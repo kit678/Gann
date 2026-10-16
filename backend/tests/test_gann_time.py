@@ -58,6 +58,10 @@ class TestCycles(unittest.TestCase):
         self.assertEqual(v[0]["date"], date(2026, 10, 15))
         self.assertEqual([x["angle"] for x in v], [0, 60, 120, 180, 240, 300])
 
+    def test_evening_base_keeps_its_own_date(self):
+        v = cycle_dates("Sun", ny(2026, 10, 15, 20, 30), 4, True, "New York")
+        self.assertEqual(v[0]["date"], date(2026, 10, 15))
+
     def test_bad_inputs(self):
         with self.assertRaises(ValueError):
             cycle_dates("Vulcan", ny(2026, 10, 15), 4, False, "New York")

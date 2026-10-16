@@ -123,8 +123,10 @@ def cycle_dates(
     start_lon = _lon(jd, body)
     sign = -1 if reverse else 1
 
+    # The base is shown as its own calendar date; only the computed crossings
+    # are rounded to the nearest day.
     vertices = [{"vertex": 0, "angle": 0.0, "utc": base.astimezone(datetime.timezone.utc),
-                 "date": gannzilla_date(base, city)}]
+                 "date": gannzilla_local_time(base, city).date()}]
     for k in range(1, parts):
         target = (start_lon + sign * 360.0 * k / parts) % 360.0
         jd = next_longitude_crossing(body, jd, target, backward=reverse)
