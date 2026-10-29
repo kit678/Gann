@@ -73,3 +73,5 @@ wheels/
 # Documentation Scraper output
 demo_output/
 *_content.md
+# TradingView charting library (own git repo, licensed, not ours)
+advanced_charts/

@@ -1,0 +1,47 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "C:/Users/kitsh/AppData/Local/miniconda3/python.exe",
+      "runtimeArgs": [
+        "-c",
+        "import os,sys; os.chdir('backend'); sys.path.insert(0,'.'); import uvicorn; uvicorn.run('app.main:app', host='127.0.0.1', port=8000)"
+      ],
+      "port": 8000
+    },
+    {
+      "name": "visualizer-backend",
+      "runtimeExecutable": "C:/Users/kitsh/AppData/Local/miniconda3/python.exe",
+      "runtimeArgs": [
+        "-c",
+        "import os,sys; os.chdir(r'C:/Dev/GannTesting/gann-visualizer/backend'); sys.path.insert(0,'.'); import uvicorn; uvicorn.run('main:app', host='127.0.0.1', port=8005)"
+      ],
+      "port": 8005
+    },
+    {
+      "name": "visualizer-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:/Dev/GannTesting/gann-visualizer/frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5173",
+        "--strictPort"
+      ],
+      "port": 5173
+    }
+  ]
+}
